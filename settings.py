@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     dashscope_api_key: str = Field(
         description="API key for DashScope service (Alibaba Cloud)"
     )
+    dashscope_api_url: str = Field(
+        default="https://dashscope.aliyuncs.com/api/v1",
+        description="Base HTTP API URL for DashScope service (Alibaba Cloud)",
+    )
     oss_region: str = Field(
         description="Alibaba Cloud OSS region. Used for temporary storage of ASR files due to limited external network access from Alibaba Cloud"
     )

@@ -12,6 +12,7 @@ from services.gemini import Gemini
 from services.bilibili import get_bilibili_video_info
 from services.downloader import download_bilibili_video
 from loguru import logger
+from settings import settings
 
 
 def submit_project(
@@ -50,6 +51,7 @@ def process_project(project_id: str) -> None:
     5. Perform automatic speech recognition (ASR)
     6. Convert ASR results to SRT format
     7. Translate subtitles using Gemini
+    8. Archive project (optional)
 
     Each stage is skipped if it has already been completed (idempotent).
     Progress is automatically saved after each stage.
@@ -162,8 +164,11 @@ def process_project(project_id: str) -> None:
         logger.success(f"Project processing complete: {project_id}")
 
         # Archive project
-        project.archive()
-        logger.success(f"Project {project_id} archived successfully")
+        if settings.archived_path is not None:
+            project.archive()
+            logger.success(f"Project {project_id} archived successfully")
+        else:
+            logger.warning("Archived path is not set, skipping archiving")
 
     except Exception as e:
         logger.error(f"Project processing failed for {project_id}: {e}")

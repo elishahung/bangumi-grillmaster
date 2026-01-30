@@ -11,7 +11,7 @@ from pathlib import Path
 from loguru import logger
 import time
 
-dashscope.base_http_api_url = "https://dashscope.aliyuncs.com/api/v1"
+dashscope.base_http_api_url = settings.dashscope_api_url
 dashscope.api_key = settings.dashscope_api_key
 
 logger.debug(f"Initialized ASR model: {settings.fun_asr_model}")

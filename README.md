@@ -5,7 +5,7 @@
 ## 說明
 
 - 僅限個人測試使用，設定偏好都是個人主觀，如需修改請自行 fork
-- 目標是 one shot 即可直接觀看，不想校準（避免被暴雷）
+- 目標是 one shot 即可直接觀看，不想校準 (避免被暴雷)
 
 ### ASR
 
@@ -44,8 +44,8 @@ Bilibili ID
 ### 前置需求
 
 - Python 3.13+
-- FFmpeg（自行安裝並加入 PATH）
-- uv（推薦）或 pip
+- FFmpeg (自行安裝並加入 PATH)
+- uv (推薦) 或 pip
 
 ### 安裝步驟
 
@@ -79,7 +79,7 @@ python main.py <BILIBILI_ID> [DESCRIPTION]
 # 使用影片標題作為描述
 grill BV18KBJBeEmV
 
-# 自訂描述（提供給翻譯用）
+# 自訂描述(提供給翻譯用)
 grill BV1CakEBaEJp "華大千鳥 - 全力100萬 - 間諜 1/7"
 ```
 

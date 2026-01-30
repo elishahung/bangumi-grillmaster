@@ -13,7 +13,7 @@ instruction = """You are an expert subtitle translator and localizer specializin
 * **Proper Nouns:** Standardize names of comedians, agencies (Yoshimoto, etc.), and pop culture references based on the provided context.
 
 ### 3. EXPLANATION STRATEGY (Parentheses)
-* **Guideline:** Provide concise explanations in full-width parentheses `（）` **only when necessary** for the viewer to understand a joke relying on Japanese puns or obscure culture.
+* **Guideline:** Provide concise explanations in parentheses `()` **only when necessary** for the viewer to understand a joke relying on Japanese puns or obscure culture.
 * **Balance:** Help the viewer without being obtrusive.
     * *Example:* `(暗指渡部建出軌醜聞)` or `(諧音：數字梗)` or `(引用歌詞)`.
 
