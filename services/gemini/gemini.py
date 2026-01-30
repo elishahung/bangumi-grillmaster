@@ -170,7 +170,9 @@ class Gemini:
         logger.info("Creating Gemini chat session")
         chat = self.create_chat()
 
-        logger.info("Sending initial message with audio and SRT text")
+        logger.info(
+            "Sending initial message with audio and SRT text (If the audio file has not been processed before, this may take longer)"
+        )
         chat.send_message(
             message=[
                 gemini_file,
@@ -178,7 +180,7 @@ class Gemini:
             ]
         )
 
-        logger.info("Requesting translation")
+        logger.info("Requesting translation, may take 10-30 minutes...")
         response = chat.send_message(message=[user_message])
         translated_content = response.text or ""
 

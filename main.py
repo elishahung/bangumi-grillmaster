@@ -11,7 +11,7 @@ from workflow import submit_project
 
 
 app = typer.Typer(
-    help="Bangumi Transcription - Automatic transcription and translation for Bangumi videos",
+    help="Bangumi GrillMaster - Automatic transcription and translation for Bilibili Bangumi videos",
     add_completion=False,
 )
 
