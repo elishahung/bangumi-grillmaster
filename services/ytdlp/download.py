@@ -1,0 +1,68 @@
+import yt_dlp
+from yt_dlp.utils import DownloadError
+from loguru import logger
+from pathlib import Path
+from typing import Any, cast
+
+
+def download_video(
+    url: str, output_path: Path, partial_download: bool = False
+) -> None:
+    # Log the entry point
+    logger.info(f"Initiating download task for input: {url}")
+
+    # Configure yt-dlp options
+    ydl_opts = {
+        "writethumbnail": True,
+        "writeinfojson": True,
+        "outtmpl": {
+            "default": f"{output_path}/%(playlist_index|0)s.%(ext)s",
+            "thumbnail": f"{output_path}/cover.%(ext)s",  # Thumbnail file name
+            "infojson": f"{output_path}/metadata.json",  # Metadata file name
+        },
+        "merge_output_format": "mp4",
+        "format": "bestvideo+bestaudio/best",
+        "postprocessors": [
+            {
+                "key": "FFmpegThumbnailsConvertor",
+                "format": "jpg",
+                "when": "before_dl",
+            },
+            {
+                # Embed thumbnail into the video file (only supported for mp4, mkv, etc.)
+                "key": "EmbedThumbnail",
+                "already_have_thumbnail": False,
+            },
+            {
+                # Write metadata to the video file tags
+                "key": "FFmpegMetadata",
+                "add_chapters": True,
+                "add_metadata": True,
+            },
+        ],
+        "concurrent_fragment_downloads": 8 if partial_download else 1,
+    }
+
+    # Execute download
+    try:
+        logger.info(f"Starting yt-dlp process for: {url}")
+
+        with yt_dlp.YoutubeDL(cast(Any, ydl_opts)) as ydl:
+            # extract_info with download=True performs the download
+            info_dict = ydl.extract_info(url, download=True)
+
+            # Safely get title for logging
+            video_title = (
+                info_dict.get("title", "Unknown Title")
+                if info_dict
+                else "Unknown"
+            )
+
+        logger.success(f"Successfully downloaded: {video_title}")
+
+    except DownloadError as e:
+        logger.error(f"yt-dlp download failed for {url}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during download execution: {e}")
+        raise

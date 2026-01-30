@@ -12,7 +12,8 @@ import shutil
 from enum import Enum
 from loguru import logger
 from settings import settings
-
+import re
+from urllib.parse import urlparse
 
 PROJECT_ROOT_NAME = "projects"
 PROJECT_FILE_NAME = "project.json"
@@ -40,6 +41,11 @@ class ProgressStage(str, Enum):
     TRANSLATED = "is_translated"
 
 
+class VideoSource(str, Enum):
+    BILIBILI = "bilibili"
+    TVER = "tver"
+
+
 class Project(BaseModel):
     """Represents a video captioning project with progress tracking.
 
@@ -47,9 +53,9 @@ class Project(BaseModel):
     and file paths for all intermediate and final outputs.
 
     Attributes:
-        id: Unique identifier for the project (often a Bilibili BV ID).
+        id: Unique identifier for the project (often a video source).
         name: Human-readable name for the project (defaults to "video").
-        description: Optional description of the project content.
+        translation_hint: Optional translation hint for the project.
         is_metadata_fetched: Whether video metadata has been retrieved.
         is_downloaded: Whether video has been downloaded.
         is_video_processed: Whether video segments have been combined.
@@ -62,7 +68,7 @@ class Project(BaseModel):
 
     id: str
     name: str = Field(default="video")
-    description: str | None = None
+    translation_hint: str | None = None
     asr_task_id: str | None = None
 
     # Progress
@@ -75,12 +81,33 @@ class Project(BaseModel):
     is_srt_completed: bool = False
     is_translated: bool = False
 
+    @staticmethod
+    def parse_source_str(source_str: str) -> str:
+        # Bilibili
+        bv_match = re.search(r"(BV[a-zA-Z0-9]+)", source_str)
+        if bv_match:
+            return bv_match.group(1)
+
+        # TVer
+        if "tver.jp" in source_str:
+            path = urlparse(source_str).path
+            parts = path.strip("/").split("/")
+            if parts:
+                return parts[-1]
+
+        if source_str.startswith("https://"):
+            raise ValueError(f"Invalid video source: {source_str}")
+
+        return source_str
+
     @classmethod
-    def from_id(cls, id: str, description: str | None = None) -> "Project":
+    def from_source_str(
+        cls, source_str: str, translation_hint: str | None = None
+    ) -> "Project":
         """Load an existing project from disk or create a new one.
 
         Args:
-            project_id: The unique identifier for the project.
+            source_str: The video source, id or url (e.g., 'BV1ZArvBaEqL', 'https://www.bilibili.com/video/BV1ZArvBaEqL').
 
         Returns:
             A Project instance loaded from the saved JSON file, or a new
@@ -90,18 +117,26 @@ class Project(BaseModel):
             ValidationError: If the saved project data is invalid.
             JSONDecodeError: If the project file is corrupted.
         """
+        id = cls.parse_source_str(source_str)
+
         logger.debug(f"Loading project: {id}")
         json_path = Path(PROJECT_ROOT_NAME) / id / PROJECT_FILE_NAME
 
         if not json_path.exists():
             logger.info(f"Creating new project: {id}")
-            return cls(id=id, description=description)
+            return cls(id=id, translation_hint=translation_hint)
 
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 project_data = json.load(f)
             project = cls.model_validate(project_data)
             logger.info(f"Loaded existing project: {id} (name: {project.name})")
+
+            if translation_hint is not None:
+                logger.warning(
+                    f"Translation hint is not supported for existing projects"
+                )
+
             return project
         except Exception as e:
             logger.error(f"Failed to load project {id}: {e}")
@@ -177,6 +212,19 @@ class Project(BaseModel):
         logger.info(f"Archiving project {self.id} to {archived_path}")
         shutil.move(str(self.project_path), str(archived_path))
         logger.info(f"Project {self.id} archived successfully")
+
+    # Source management
+    @property
+    def source(self) -> VideoSource:
+        if self.id.startswith("BV"):
+            return VideoSource.BILIBILI
+        return VideoSource.TVER
+
+    @property
+    def source_url(self) -> str:
+        if self.source == VideoSource.BILIBILI:
+            return f"https://www.bilibili.com/video/{self.id}"
+        return f"https://tver.jp/episodes/{self.id}"
 
     # Files management
     @property

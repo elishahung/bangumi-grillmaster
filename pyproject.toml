@@ -5,7 +5,6 @@ description = "japanese tv show transcription"
 requires-python = ">=3.13"
 dependencies = [
     "alibabacloud-oss-v2>=1.2.2",
-    "bilibili-api-python>=17.4.1",
     "dashscope>=1.25.9",
     "ffmpeg-python>=0.2.0",
     "google-genai>=1.60.0",

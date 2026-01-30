@@ -4,28 +4,26 @@ This module provides the main processing function that coordinates all stages
 of the video captioning workflow, from fetching metadata to translation.
 """
 
-import asyncio
-from project import Project, ProgressStage
+from project import Project, ProgressStage, VideoSource
 from services.media import MediaProcessor
 from services.fun_asr import FunASR
 from services.gemini import Gemini
-from services.bilibili import get_bilibili_video_info
-from services.downloader import download_bilibili_video
+from services.ytdlp import download_video, get_video_info
 from loguru import logger
 from settings import settings
 
 
 def submit_project(
-    bilibili_id: str, video_description: str | None = None
+    source_str: str, translation_hint: str | None = None
 ) -> None:
     """Submit a new video project for processing.
 
-    This function creates a new project with the given Bilibili video ID and
+    This function creates a new project with the given video source and
     optional description, saves it to disk, and immediately starts processing
     through the captioning pipeline.
 
     Args:
-        bilibili_id: The Bilibili video ID (e.g., 'BV1ZArvBaEqL').
+        source_str: The video source, id or url (e.g., 'BV1ZArvBaEqL', 'https://www.bilibili.com/video/BV1ZArvBaEqL').
         video_description: Optional description of the video content. If not provided,
             the video's title will be used as description during metadata fetching.
 
@@ -33,10 +31,12 @@ def submit_project(
         The project will be automatically saved to the projects directory before
         processing begins.
     """
-    logger.info(f"Submitting new project: {bilibili_id}")
-    new_project = Project.from_id(id=bilibili_id, description=video_description)
+    logger.info(f"Submitting new project: {source_str}")
+    new_project = Project.from_source_str(
+        source_str=source_str, translation_hint=translation_hint
+    )
     new_project.save()
-    logger.info(f"Project saved: {bilibili_id}")
+    logger.info(f"Project saved: {source_str}")
     process_project(new_project.id)
 
 
@@ -44,7 +44,7 @@ def process_project(project_id: str) -> None:
     """Process a video project through the complete captioning pipeline.
 
     This function orchestrates the entire workflow:
-    1. Fetch video metadata from Bilibili
+    1. Fetch video metadata from source
     2. Download video
     3. Combine downloaded video segments
     4. Extract audio from video
@@ -57,22 +57,30 @@ def process_project(project_id: str) -> None:
     Progress is automatically saved after each stage.
 
     Args:
-        project_id: The unique identifier for the project (usually Bilibili BV ID).
+        project_id: The unique identifier for the project.
 
     Raises:
         Exception: If any stage of the processing fails.
     """
     logger.info(f"Starting project processing: {project_id}")
     try:
-        project = Project.from_id(project_id)
+        project = Project.from_source_str(project_id)
 
         # Fetch metadata
         if not project.is_metadata_fetched:
             logger.info(f"Stage: Fetching metadata for {project_id}")
-            video_data = asyncio.run(get_bilibili_video_info(project.id))
-            # If description is not set, use the video title
-            if project.description is None:
-                project.description = video_data.title
+            video_data = get_video_info(project.source_url)
+            # If translation hint is not set:
+            # - bilibili: use the video title
+            # - tver: use the video title + description
+            if project.translation_hint is None:
+                if project.source == VideoSource.BILIBILI:
+                    project.translation_hint = video_data.title
+                elif project.source == VideoSource.TVER:
+                    project.translation_hint = (
+                        f"{video_data.title} - {video_data.description}"
+                    )
+
             project.name = video_data.filename
             project.mark_progress(ProgressStage.METADATA_FETCHED)
             logger.success("Stage complete: Metadata fetched")
@@ -82,7 +90,7 @@ def process_project(project_id: str) -> None:
         # Download video
         if not project.is_downloaded:
             logger.info(f"Stage: Downloading video for {project_id}")
-            download_bilibili_video(project.id, project.project_path)
+            download_video(project.source_url, project.project_path)
             project.mark_progress(ProgressStage.DOWNLOADED)
             logger.success("Stage complete: Video downloaded")
         else:
@@ -151,7 +159,7 @@ def process_project(project_id: str) -> None:
             gemini = Gemini()
             gemini.translate(
                 project.id,
-                project.description,
+                project.translation_hint,
                 project.srt_path,
                 project.audio_path,
                 project.translated_path,

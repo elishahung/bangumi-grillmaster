@@ -72,7 +72,7 @@ class FunASR:
             file_urls=[
                 file_url,
             ],
-            language_hints=["ja", "en"],
+            language_hints=["ja"],
         )
         task_id = task_response.output.task_id
         logger.info(f"Transcription task submitted. Task ID: {task_id}")
