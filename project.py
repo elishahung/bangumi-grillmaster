@@ -6,18 +6,21 @@ and translation.
 """
 
 from pydantic import BaseModel, Field
-from settings import settings
 from pathlib import Path
 import json
+import shutil
 from enum import Enum
 from loguru import logger
+from settings import settings
 
+
+PROJECT_ROOT_NAME = "projects"
 PROJECT_FILE_NAME = "project.json"
 VIDEO_FILE_NAME = "video.mp4"
 AUDIO_FILE_NAME = "audio.opus"
 ASR_FILE_NAME = "asr.json"
 SRT_FILE_NAME = "asr.srt"
-TRANSLATED_FILE_NAME = "translated.srt"
+TRANSLATED_FILE_NAME = "video.srt"
 
 
 class ProgressStage(str, Enum):
@@ -73,7 +76,7 @@ class Project(BaseModel):
     is_translated: bool = False
 
     @classmethod
-    def from_id(cls, project_id: str) -> "Project":
+    def from_id(cls, id: str, description: str | None = None) -> "Project":
         """Load an existing project from disk or create a new one.
 
         Args:
@@ -87,25 +90,21 @@ class Project(BaseModel):
             ValidationError: If the saved project data is invalid.
             JSONDecodeError: If the project file is corrupted.
         """
-        logger.debug(f"Loading project: {project_id}")
-        json_path = (
-            Path(settings.project_root_name) / project_id / PROJECT_FILE_NAME
-        )
+        logger.debug(f"Loading project: {id}")
+        json_path = Path(PROJECT_ROOT_NAME) / id / PROJECT_FILE_NAME
 
         if not json_path.exists():
-            logger.info(f"Creating new project: {project_id}")
-            return cls(id=project_id)
+            logger.info(f"Creating new project: {id}")
+            return cls(id=id, description=description)
 
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 project_data = json.load(f)
             project = cls.model_validate(project_data)
-            logger.info(
-                f"Loaded existing project: {project_id} (name: {project.name})"
-            )
+            logger.info(f"Loaded existing project: {id} (name: {project.name})")
             return project
         except Exception as e:
-            logger.error(f"Failed to load project {project_id}: {e}")
+            logger.error(f"Failed to load project {id}: {e}")
             raise
 
     def save(self) -> None:
@@ -141,6 +140,44 @@ class Project(BaseModel):
         setattr(self, field_name, True)
         self.save()
 
+    def archive(self) -> None:
+        """Archive the entire project by moving it to the archived directory.
+
+        Moves the project directory to the archived path.
+
+        Raises:
+            FileNotFoundError: If the project directory doesn't exist.
+            IOError: If the directory cannot be moved.
+        """
+        if settings.archived_path is None:
+            logger.warning("Archived path is not set, skipping archiving")
+            return
+
+        archived_root = Path(settings.archived_path)
+        archived_path = archived_root / self.name
+
+        if not self.project_path.exists():
+            logger.error(
+                f"Project directory does not exist: {self.project_path}"
+            )
+            raise FileNotFoundError(
+                f"Project directory not found: {self.project_path}"
+            )
+
+        # Create archived directory if it doesn't exist
+        archived_root.mkdir(parents=True, exist_ok=True)
+
+        # If archived path already exists, remove it first
+        if archived_path.exists():
+            logger.warning(
+                f"Archived project already exists, removing: {archived_path}"
+            )
+            shutil.rmtree(archived_path)
+
+        logger.info(f"Archiving project {self.id} to {archived_path}")
+        shutil.move(str(self.project_path), str(archived_path))
+        logger.info(f"Project {self.id} archived successfully")
+
     # Files management
     @property
     def project_path(self) -> Path:
@@ -149,7 +186,7 @@ class Project(BaseModel):
         Returns:
             Path to the project directory.
         """
-        return Path(settings.project_root_name) / self.id
+        return Path(PROJECT_ROOT_NAME) / self.id
 
     @property
     def json_path(self) -> Path:

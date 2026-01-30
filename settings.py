@@ -8,7 +8,6 @@ class Settings(BaseSettings):
 
     fun_asr_model: str = "fun-asr-2025-11-07"
     gemini_model: str = "gemini-3-flash-preview"
-    project_root_name: str = "projects"
 
     dashscope_api_key: str
     oss_region: str
@@ -16,6 +15,7 @@ class Settings(BaseSettings):
     oss_access_key_id: str
     oss_access_key_secret: str
     gemini_api_key: str
+    archived_path: str | None = None
 
 
 settings = Settings()

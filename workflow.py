@@ -18,22 +18,22 @@ def submit_project(
     bilibili_id: str, video_description: str | None = None
 ) -> None:
     """Submit a new video project for processing.
-    
+
     This function creates a new project with the given Bilibili video ID and
     optional description, saves it to disk, and immediately starts processing
     through the captioning pipeline.
-    
+
     Args:
         bilibili_id: The Bilibili video ID (e.g., 'BV1ZArvBaEqL').
         video_description: Optional description of the video content. If not provided,
             the video's title will be used as description during metadata fetching.
-    
+
     Note:
         The project will be automatically saved to the projects directory before
         processing begins.
     """
     logger.info(f"Submitting new project: {bilibili_id}")
-    new_project = Project(id=bilibili_id, description=video_description)
+    new_project = Project.from_id(id=bilibili_id, description=video_description)
     new_project.save()
     logger.info(f"Project saved: {bilibili_id}")
     process_project(new_project.id)
@@ -160,6 +160,10 @@ def process_project(project_id: str) -> None:
             logger.debug("Stage skipped: Translation already completed")
 
         logger.success(f"Project processing complete: {project_id}")
+
+        # Archive project
+        project.archive()
+        logger.success(f"Project {project_id} archived successfully")
 
     except Exception as e:
         logger.error(f"Project processing failed for {project_id}: {e}")
