@@ -22,11 +22,11 @@ TRANSLATED_FILE_NAME = "translated.srt"
 
 class ProgressStage(str, Enum):
     """Enum representing different stages in the video processing workflow.
-    
+
     Each value corresponds to a boolean field in the Project model that tracks
     whether that stage has been completed.
     """
-    
+
     METADATA_FETCHED = "is_metadata_fetched"
     DOWNLOADED = "is_downloaded"
     VIDEO_PROCESSED = "is_video_processed"
@@ -38,10 +38,10 @@ class ProgressStage(str, Enum):
 
 class Project(BaseModel):
     """Represents a video captioning project with progress tracking.
-    
+
     This class manages project metadata, progress through various processing stages,
     and file paths for all intermediate and final outputs.
-    
+
     Attributes:
         id: Unique identifier for the project (often a Bilibili BV ID).
         name: Human-readable name for the project (defaults to "video").
@@ -54,6 +54,7 @@ class Project(BaseModel):
         is_srt_completed: Whether SRT subtitle file has been generated.
         is_translated: Whether translation has been completed.
     """
+
     id: str
     name: str = Field(default="video")
     description: str | None = None
@@ -70,14 +71,14 @@ class Project(BaseModel):
     @classmethod
     def from_id(cls, project_id: str) -> "Project":
         """Load an existing project from disk or create a new one.
-        
+
         Args:
             project_id: The unique identifier for the project.
-            
+
         Returns:
             A Project instance loaded from the saved JSON file, or a new
             Project if no saved file exists.
-            
+
         Raises:
             ValidationError: If the saved project data is invalid.
             JSONDecodeError: If the project file is corrupted.
@@ -86,7 +87,7 @@ class Project(BaseModel):
         json_path = (
             Path(settings.project_root_name) / project_id / PROJECT_FILE_NAME
         )
-        
+
         if not json_path.exists():
             logger.info(f"Creating new project: {project_id}")
             return cls(id=project_id)
@@ -95,7 +96,9 @@ class Project(BaseModel):
             with open(json_path, "r") as f:
                 project_data = json.load(f)
             project = cls.model_validate(project_data)
-            logger.info(f"Loaded existing project: {project_id} (name: {project.name})")
+            logger.info(
+                f"Loaded existing project: {project_id} (name: {project.name})"
+            )
             return project
         except Exception as e:
             logger.error(f"Failed to load project {project_id}: {e}")
@@ -103,17 +106,17 @@ class Project(BaseModel):
 
     def save(self) -> None:
         """Save the current project state to disk as JSON.
-        
+
         The project is saved to project.json in the project directory.
         Creates the directory if it doesn't exist.
-        
+
         Raises:
             IOError: If the file cannot be written.
         """
         logger.debug(f"Saving project: {self.id}")
         try:
             self.project_path.mkdir(parents=True, exist_ok=True)
-            with open(self.json_path, "w") as f:
+            with open(self.json_path, "w", encoding="utf-8") as f:
                 f.write(self.model_dump_json(indent=4, ensure_ascii=False))
             logger.debug(f"Project saved: {self.id}")
         except Exception as e:
@@ -122,10 +125,10 @@ class Project(BaseModel):
 
     def mark_progress(self, stage: ProgressStage) -> None:
         """Mark a processing stage as completed and save the project.
-        
+
         Args:
             stage: The progress stage to mark as complete.
-            
+
         Raises:
             IOError: If the project cannot be saved.
         """
@@ -138,7 +141,7 @@ class Project(BaseModel):
     @property
     def project_path(self) -> Path:
         """Get the project directory path.
-        
+
         Returns:
             Path to the project directory.
         """
@@ -147,7 +150,7 @@ class Project(BaseModel):
     @property
     def json_path(self) -> Path:
         """Get the path to the project metadata JSON file.
-        
+
         Returns:
             Path to project.json.
         """
@@ -156,7 +159,7 @@ class Project(BaseModel):
     @property
     def downloaded_video_paths(self) -> list[Path]:
         """Get all downloaded video segment files.
-        
+
         Returns:
             List of paths to downloaded MP4 files, excluding the final combined video.
         """
@@ -170,7 +173,7 @@ class Project(BaseModel):
     @property
     def video_path(self) -> Path:
         """Get the path to the final combined video file.
-        
+
         Returns:
             Path to video.mp4.
         """
@@ -179,7 +182,7 @@ class Project(BaseModel):
     @property
     def audio_path(self) -> Path:
         """Get the path to the extracted audio file.
-        
+
         Returns:
             Path to audio.opus.
         """
@@ -188,7 +191,7 @@ class Project(BaseModel):
     @property
     def asr_path(self) -> Path:
         """Get the path to the ASR results JSON file.
-        
+
         Returns:
             Path to asr.json.
         """
@@ -197,7 +200,7 @@ class Project(BaseModel):
     @property
     def srt_path(self) -> Path:
         """Get the path to the original subtitle file.
-        
+
         Returns:
             Path to srt.srt.
         """
@@ -206,7 +209,7 @@ class Project(BaseModel):
     @property
     def translated_path(self) -> Path:
         """Get the path to the translated subtitle file.
-        
+
         Returns:
             Path to translated.srt.
         """
@@ -216,10 +219,10 @@ class Project(BaseModel):
 # Runtime check enum values match field names
 def check_enum_field_sync():
     """Verify that all ProgressStage enum values correspond to Project fields.
-    
+
     This function is called at module import time to ensure that the enum
     values stay synchronized with the actual Project model fields.
-    
+
     Raises:
         ValueError: If a ProgressStage enum value doesn't match a Project field name.
     """
