@@ -12,4 +12,6 @@ dependencies = [
     "loguru>=0.7.3",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
+    "typer>=0.21.1",
+    "yt-dlp>=2026.1.29",
 ]

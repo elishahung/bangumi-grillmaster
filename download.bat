@@ -1,1 +1,0 @@
-ytdl --cookies cookies.txt -o "projects/%%(id)s/%%(playlist_index|0)s_%%(title)s.%%(ext)s" -a download.txt

@@ -2,12 +2,14 @@ from http import HTTPStatus
 from dashscope.audio.asr import Transcription
 from urllib import request
 import dashscope
+from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 import json
 from .srt import convert_file
 from .storage import OSSStorage
 from settings import settings
 from pathlib import Path
 from loguru import logger
+import time
 
 dashscope.base_http_api_url = "https://dashscope.aliyuncs.com/api/v1"
 dashscope.api_key = settings.dashscope_api_key
@@ -24,6 +26,8 @@ class FunASR:
     Alibaba's FunASR service, including uploading files to OSS,
     initiating transcription tasks, and converting results to SRT format.
     """
+
+    MAX_RETRY_COUNT = 3
 
     def __init__(self):
         """
@@ -53,24 +57,8 @@ class FunASR:
         self.storage.upload_file(file_path, key)
         self.storage.make_file_public(key)
 
-    def transcribe(self, key: str, file_path: Path, json_path: Path):
-        """
-        Transcribe an audio file using Alibaba FunASR service.
-
-        This method uploads the file to OSS (if not already uploaded),
-        initiates an async transcription task, waits for completion,
-        and saves the result as JSON.
-
-        Args:
-            key: The object key (path) in the OSS bucket.
-            file_path: Local path to the audio file.
-            json_path: Path where the transcription JSON will be saved.
-
-        Raises:
-            FileNotFoundError: If the audio file does not exist.
-            Exception: If transcription fails or encounters an error.
-        """
-        logger.info(f"Starting transcription for: {file_path}")
+    def submit_transcription_task(self, key: str, file_path: Path):
+        logger.info(f"Submitting transcription task for: {file_path}")
 
         self.__ensure_storage_file(key, file_path)
         file_url = self.storage.get_public_url(key)
@@ -84,15 +72,33 @@ class FunASR:
             file_urls=[
                 file_url,
             ],
-            language_hints=[
-                "ja",
-            ],
+            language_hints=["ja", "en"],
         )
         task_id = task_response.output.task_id
         logger.info(f"Transcription task submitted. Task ID: {task_id}")
-        logger.info("Waiting for transcription to complete...")
+        return task_id
 
-        transcription_response = Transcription.wait(task=task_id)
+    def process_transcription_task(
+        self, key: str, task_id: str, json_path: Path
+    ):
+        logger.info(f"Processing transcription task: {task_id}")
+
+        # Simple retry: attempt up to 3 times
+        transcription_response: DashScopeAPIResponse | None = None
+        for attempt in range(self.MAX_RETRY_COUNT):
+            try:
+                transcription_response = Transcription.wait(task=task_id)
+                break
+            except Exception as e:
+                if attempt == self.MAX_RETRY_COUNT - 1:  # Last attempt
+                    raise
+                logger.warning(
+                    f"Transcription.wait failed (attempt {attempt + 1}/3), retrying..."
+                )
+                time.sleep(1)
+        assert (
+            transcription_response is not None
+        ), "Failed to get transcription response"
 
         json_path.parent.mkdir(parents=True, exist_ok=True)
         if transcription_response.status_code == HTTPStatus.OK:
@@ -109,6 +115,9 @@ class FunASR:
                 logger.success(
                     f"Transcription completed and saved to: {json_path}"
                 )
+
+                # Clean up the temporary file
+                self.storage.delete_file(key)
             else:
                 error_msg = f"Transcription failed with status: {transcription['subtask_status']}"
                 logger.error(f"{error_msg}: {transcription}")
