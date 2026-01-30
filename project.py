@@ -153,7 +153,7 @@ class Project(BaseModel):
             logger.warning("Archived path is not set, skipping archiving")
             return
 
-        archived_root = Path(settings.archived_path)
+        archived_root = settings.archived_path
         archived_path = archived_root / self.name
 
         if not self.project_path.exists():

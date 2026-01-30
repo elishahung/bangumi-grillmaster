@@ -9,6 +9,7 @@ from yt_dlp.utils import DownloadError
 from loguru import logger
 from pathlib import Path
 from typing import Any, cast
+from settings import settings
 
 
 class YtDlpLoguruAdapter:
@@ -32,9 +33,7 @@ class YtDlpLoguruAdapter:
         logger.error(f"[yt-dlp] {msg}")
 
 
-def download_bilibili_video(
-    input_str: str, output_path: Path, cookies_path: Path | None = None
-) -> None:
+def download_bilibili_video(input_str: str, output_path: Path) -> None:
     """Downloads a Bilibili video using yt-dlp with project-based directory structure.
 
     This function handles URL parsing, configures the output template to folder
@@ -68,12 +67,16 @@ def download_bilibili_video(
         url = input_str
 
     # Check cookies existence
-    if cookies_path:
-        logger.info(f"Using cookies file: {cookies_path}")
+    if settings.cookies_txt_path:
+        logger.info(f"Using cookies file: {settings.cookies_txt_path}")
 
     # Configure yt-dlp options
     ydl_opts = {
-        "cookiefile": cookies_path.absolute() if cookies_path else None,
+        "cookiefile": (
+            str(settings.cookies_txt_path.absolute())
+            if settings.cookies_txt_path
+            else None
+        ),
         "outtmpl": f"{output_path}/%(playlist_index|0)s.%(ext)s",
         "logger": YtDlpLoguruAdapter(),
         "merge_output_format": "mp4",

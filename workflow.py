@@ -9,7 +9,7 @@ from project import Project, ProgressStage
 from services.media import MediaProcessor
 from services.fun_asr import FunASR
 from services.gemini import Gemini
-from services.bilibili import get_video_info
+from services.bilibili import get_bilibili_video_info
 from services.downloader import download_bilibili_video
 from loguru import logger
 
@@ -67,7 +67,7 @@ def process_project(project_id: str) -> None:
         # Fetch metadata
         if not project.is_metadata_fetched:
             logger.info(f"Stage: Fetching metadata for {project_id}")
-            video_data = asyncio.run(get_video_info(project.id))
+            video_data = asyncio.run(get_bilibili_video_info(project.id))
             # If description is not set, use the video title
             if project.description is None:
                 project.description = video_data.title

@@ -5,9 +5,9 @@ from Bilibili using the bilibili_api library.
 """
 
 from bilibili_api import video
+import re
 from loguru import logger
 from pydantic import BaseModel, HttpUrl, ValidationError
-from utils import sanitize_filename
 
 
 class BilibiliOwner(BaseModel):
@@ -46,10 +46,17 @@ class BilibiliVideoData(BaseModel):
         Returns:
             Sanitized video title suitable for use as a filename.
         """
-        return sanitize_filename(self.title)
+        return self.sanitize_filename(self.title)
+
+    @staticmethod
+    def sanitize_filename(text: str) -> str:
+        """Sanitize a filename-safe version of the text."""
+        safe_name = re.sub(r"[^\w\s-]", "", text).strip()
+        safe_name = re.sub(r"[-\s]+", "_", safe_name)
+        return safe_name
 
 
-async def get_video_info(bvid: str) -> BilibiliVideoData:
+async def get_bilibili_video_info(bvid: str) -> BilibiliVideoData:
     """Fetch video information from Bilibili by BV ID.
 
     Args:
