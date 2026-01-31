@@ -46,6 +46,7 @@ class VideoSource(str, Enum):
 
     BILIBILI = "bilibili"
     TVER = "tver"
+    ABEMA = "abema"
 
 
 class Project(BaseModel):
@@ -88,6 +89,7 @@ class Project(BaseModel):
         """Parse a video source string to extract the video ID.
 
         Handles various input formats including direct IDs and full URLs.
+        Supports: Bilibili (URL/BV), TVer (URL/ID), Abema (URL/ID).
 
         Args:
             source_str: Video source as ID or URL.
@@ -98,20 +100,35 @@ class Project(BaseModel):
         Raises:
             ValueError: If the URL format is not recognized.
         """
+        # 1. Handle Bilibili (Most distinct format)
         bv_match = re.search(r"(BV[a-zA-Z0-9]+)", source_str)
         if bv_match:
             return bv_match.group(1)
 
-        # TVer
-        if "tver.jp" in source_str:
-            path = urlparse(source_str).path
-            parts = path.strip("/").split("/")
-            if parts:
-                return parts[-1]
+        # 2. Handle URLs (Bilibili & TVer & Abema)
+        # Using urlparse is safer for handling query parameters
+        if (
+            "bilibili.com" in source_str
+            or "tver.jp" in source_str
+            or "abema.tv" in source_str
+        ):
+            try:
+                path = urlparse(source_str).path
+                parts = path.strip("/").split("/")
+                if parts:
+                    # Abema: /video/episode/90-979_s1_p123 -> 90-979_s1_p123
+                    # TVer: /episodes/ep12345 -> ep12345
+                    # Bilibili: /video/BV1ZArvBaEqL -> BV1ZArvBaEqL
+                    return parts[-1]
+            except Exception:
+                pass  # Fall through to error if parsing fails
 
-        if source_str.startswith("https://"):
+        # 3. Reject unknown URLs
+        # If it looks like a URL but wasn't caught above, it's invalid/unsupported
+        if source_str.startswith(("https://", "http://")):
             raise ValueError(f"Invalid video source: {source_str}")
 
+        # 4. Return as Direct ID
         return source_str
 
     @classmethod
@@ -235,9 +252,18 @@ class Project(BaseModel):
         Returns:
             The VideoSource enum value for this project.
         """
+        # Bilibili: Always starts with BV
         if self.id.startswith("BV"):
             return VideoSource.BILIBILI
-        return VideoSource.TVER
+
+        # TVer: IDs typically start with 'ep' (episode) or 'sh' (series)
+        # and contain ONLY alphanumeric characters (no hyphens/underscores).
+        if self.id.startswith(("ep", "sh")) and self.id.isalnum():
+            return VideoSource.TVER
+
+        # Abema: IDs often contain '_', '-', or start with numbers.
+        # We treat Abema as the fallback for non-TVer IDs.
+        return VideoSource.ABEMA
 
     @property
     def source_url(self) -> str:
@@ -248,7 +274,14 @@ class Project(BaseModel):
         """
         if self.source == VideoSource.BILIBILI:
             return f"https://www.bilibili.com/video/{self.id}"
-        return f"https://tver.jp/episodes/{self.id}"
+
+        if self.source == VideoSource.TVER:
+            return f"https://tver.jp/episodes/{self.id}"
+
+        if self.source == VideoSource.ABEMA:
+            return f"https://abema.tv/video/episode/{self.id}"
+
+        raise ValueError(f"Invalid video source: {self.source}")
 
     # Files management
     @property
