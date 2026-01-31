@@ -1,3 +1,9 @@
+"""yt-dlp client configuration and logging adapter.
+
+This module provides a configured yt-dlp client with loguru integration
+for consistent logging across the application.
+"""
+
 import yt_dlp
 from yt_dlp.utils import DownloadError
 from loguru import logger
@@ -7,7 +13,11 @@ from settings import settings
 
 
 class YtDlpLoguruAdapter:
-    """Redirects yt-dlp standard logging to Loguru."""
+    """Adapter that redirects yt-dlp's standard logging to loguru.
+
+    yt-dlp expects a logger object with debug, info, warning, and error methods.
+    This adapter maps those calls to loguru with a [yt-dlp] prefix for easy filtering.
+    """
 
     def debug(self, msg: str):
         # yt-dlp uses 'debug' for a lot of verbose info.
@@ -37,6 +47,17 @@ if cookies_txt_path:
 
 
 def get_ytdlp_client(opts: dict | None = None):
+    """Create a configured yt-dlp client instance.
+
+    Creates a YoutubeDL instance with loguru logging integration and
+    optional cookie authentication from settings.
+
+    Args:
+        opts: Additional yt-dlp options to merge with defaults.
+
+    Returns:
+        A configured yt_dlp.YoutubeDL instance.
+    """
     if opts is None:
         opts = {}
 

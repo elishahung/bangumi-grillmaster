@@ -1,6 +1,6 @@
 # Bangumi GrillMaster
 
-下載 bilibili 的日本綜藝節目，生成繁體中文 SRT 字幕。
+下載日本綜藝節目，生成繁體中文 SRT 字幕。
 
 ## 說明
 
@@ -22,7 +22,7 @@
 ## 流程
 
 ```
-Bilibili ID
+Video ID
     ↓
 下載影片 (yt-dlp)
     ↓
@@ -64,23 +64,29 @@ pip install -e .
 將 `scripts/` 資料夾加到系統 PATH，然後執行：
 
 ```bash
-grill <BILIBILI_ID> [DESCRIPTION]
+grill <SOURCE> [TRANSLATION_HINT]
 ```
 
 ### 方式二：直接執行
 
 ```bash
-python main.py <BILIBILI_ID> [DESCRIPTION]
+python main.py <SOURCE> [TRANSLATION_HINT]
 ```
+
+- `SOURCE`: 影片 ID 或完整 URL
+- `TRANSLATION_HINT`: 可選，提供給翻譯用的提示
 
 ### 範例
 
 ```bash
-# 使用影片標題作為描述
+# 使用影片標題作為翻譯提示
 grill BV18KBJBeEmV
 
-# 自訂描述(提供給翻譯用)
+# 自訂翻譯提示
 grill BV1CakEBaEJp "華大千鳥 - 全力100萬 - 間諜 1/7"
+
+# 使用完整 URL
+grill "https://www.bilibili.com/video/BV18KBJBeEmV"
 ```
 
 ## 環境變數
@@ -103,14 +109,14 @@ GEMINI_API_KEY=xxx
 GEMINI_MODEL=gemini-3-pro-preview
 
 # 可選
-COOKIES_TXT_PATH=./cookies.txt   # Bilibili 會員 cookies
+COOKIES_TXT_PATH=./cookies.txt   # 影片來源網站 cookies (供 yt-dlp 使用)
 ARCHIVED_PATH=NAS:\bangumi\ai\  # 歸檔路徑 - 處理完直接移至指定資料夾並將資料夾名稱改為影片名稱
 ```
 
 ## 專案結構
 
 ```
-projects/{bilibili_id}/
+projects/{video_id}/
 ├── project.json   # 專案狀態
 ├── video.mp4      # 合併後的影片
 ├── audio.opus     # 提取的音檔

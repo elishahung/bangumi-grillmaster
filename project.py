@@ -42,6 +42,8 @@ class ProgressStage(str, Enum):
 
 
 class VideoSource(str, Enum):
+    """Enum representing supported video source platforms."""
+
     BILIBILI = "bilibili"
     TVER = "tver"
 
@@ -83,7 +85,19 @@ class Project(BaseModel):
 
     @staticmethod
     def parse_source_str(source_str: str) -> str:
-        # Bilibili
+        """Parse a video source string to extract the video ID.
+
+        Handles various input formats including direct IDs and full URLs.
+
+        Args:
+            source_str: Video source as ID or URL.
+
+        Returns:
+            The extracted video ID.
+
+        Raises:
+            ValueError: If the URL format is not recognized.
+        """
         bv_match = re.search(r"(BV[a-zA-Z0-9]+)", source_str)
         if bv_match:
             return bv_match.group(1)
@@ -216,12 +230,22 @@ class Project(BaseModel):
     # Source management
     @property
     def source(self) -> VideoSource:
+        """Determine the video source platform based on the project ID.
+
+        Returns:
+            The VideoSource enum value for this project.
+        """
         if self.id.startswith("BV"):
             return VideoSource.BILIBILI
         return VideoSource.TVER
 
     @property
     def source_url(self) -> str:
+        """Get the full URL for the video source.
+
+        Returns:
+            The complete URL to the video on its source platform.
+        """
         if self.source == VideoSource.BILIBILI:
             return f"https://www.bilibili.com/video/{self.id}"
         return f"https://tver.jp/episodes/{self.id}"

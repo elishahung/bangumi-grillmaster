@@ -1,3 +1,9 @@
+"""Video download functionality using yt-dlp.
+
+This module handles video downloads from various sources with automatic
+thumbnail extraction, metadata embedding, and format conversion.
+"""
+
 import yt_dlp
 from yt_dlp.utils import DownloadError
 from loguru import logger
@@ -8,7 +14,22 @@ from typing import Any, cast
 def download_video(
     url: str, output_path: Path, partial_download: bool = False
 ) -> None:
-    # Log the entry point
+    """Download a video from the given URL using yt-dlp.
+
+    Downloads the video with best available quality, extracts and embeds
+    thumbnail, and writes metadata. Output files are organized in the
+    specified output directory.
+
+    Args:
+        url: The video URL or identifier to download.
+        output_path: Directory path where downloaded files will be saved.
+        partial_download: If True, enables concurrent fragment downloads
+            for faster partial downloads.
+
+    Raises:
+        DownloadError: If yt-dlp fails to download the video.
+        Exception: For unexpected errors during download.
+    """
     logger.info(f"Initiating download task for input: {url}")
 
     # Configure yt-dlp options
