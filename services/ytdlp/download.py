@@ -38,7 +38,7 @@ def download_video(
         "writeinfojson": True,
         "outtmpl": {
             "default": f"{output_path}/%(playlist_index|0)s.%(ext)s",
-            "thumbnail": f"{output_path}/cover.%(ext)s",  # Thumbnail file name
+            "infojson": f"{output_path}/%(ext)s",  # Metadata file name
         },
         "merge_output_format": "mp4",
         "format": "bestvideo+bestaudio/best",
