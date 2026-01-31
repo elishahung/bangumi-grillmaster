@@ -4,16 +4,21 @@
 
 ## 說明
 
-- 僅限個人測試使用，設定偏好都是個人主觀，如需修改請自行 fork
+- 設定偏好都是個人主觀，如需修改請自行 fork
 - 目標是 one shot 即可直接觀看，不想校準 (避免被暴雷)
+- 一小時左右的影片成本大概 30 台幣 (基本就是 gemini 的成本，ASR 很少)
+
+## 工具
+
+經過各種嘗試，API、自架等組合後，覺得以下方式最合適
 
 ### ASR
 
-各種 API 和自架測試下來，目前[豆包語音](https://www.volcengine.com/docs/6561/80909)效果最好，但這模型沒開海外，走 API 需要認證無法。所以改採 FunASR (`fun-asr-2025-11-07`)，會有英文奇怪切割的狀況
+[豆包語音](https://www.volcengine.com/docs/6561/80909)效果最好，但還沒開放海外，走 API 需要認證無法。所以改採 FunASR (`fun-asr-2025-11-07`)，會有英文奇怪切割的狀況
 
 ### 翻譯
 
-將字幕跟音檔一起餵給 Gemini 3 Pro Preview 翻譯效果最好，不做切割。實測 M1 2025 第一段 1.5 小時沒問題。Gemini 3 Flash Preview 後半段會出現幻覺 (分多次對話可能可以改善？)
+使用 Gemini 3 Pro Preview，字幕跟音檔一起餵，不做切割。實測 M1 2025 第一段 1.5 小時沒問題。Gemini 3 Flash Preview 後半段會出現幻覺 (分多次對話可能可以改善？)
 
 覺得 API 太貴這步也可以到 Gemini 平台 或 AI Studio 手動操作
 
@@ -74,7 +79,7 @@ python main.py <SOURCE> [TRANSLATION_HINT]
 ```
 
 - `SOURCE`: 影片 ID 或完整 URL
-- `TRANSLATION_HINT`: 可選，提供給翻譯用的提示
+- `TRANSLATION_HINT`: 可選，提供給翻譯用的提示，通常是 bilibili 只有隱晦標題的需要
 
 ### 範例
 
@@ -109,7 +114,7 @@ GEMINI_API_KEY=xxx
 GEMINI_MODEL=gemini-3-pro-preview
 
 # 可選
-COOKIES_TXT_PATH=./cookies.txt   # 影片來源網站 cookies (供 yt-dlp 使用)
+COOKIES_TXT_PATH=cookies.txt   # 影片來源網站 cookies (供 yt-dlp 使用)
 ARCHIVED_PATH=NAS:\bangumi\ai\  # 歸檔路徑 - 處理完直接移至指定資料夾並將資料夾名稱改為影片名稱
 ```
 
