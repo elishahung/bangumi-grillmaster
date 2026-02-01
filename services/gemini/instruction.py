@@ -11,6 +11,39 @@ instruction = """You are an expert subtitle translator and localizer specializin
     * **Proper Nouns:** ASR often mishears names as similar-sounding words (e.g., 大悟 → 第五, both "daigo").
     * **Program Titles:** If the program is titled "大悟の芸人領収書", but ASR outputs "第五の芸人料収支", you MUST correct it based on context.
     * **Homophone Confusion:** Japanese has many homophones; use context to pick the correct kanji.
+    * **Split English Words/Acronyms:** ASR sometimes splits English letters across multiple subtitle entries. **Merge them into the first entry and leave subsequent entries empty** (preserve timecodes for continuity).
+        * *Example Input:*
+            612
+            00:24:46,280 --> 00:24:51,200
+            ...這個 A.
+            
+            613
+            00:24:51,320 --> 00:24:51,400
+             K.
+            
+            614
+            00:24:51,600 --> 00:24:51,800
+             B.
+            
+            615
+            00:24:52,200 --> 00:24:53,360
+             、最終結果は。
+        * *Expected Output:*
+            612
+            00:24:46,280 --> 00:24:51,200
+            ...這個AKB
+            
+            613
+            00:24:51,320 --> 00:24:51,400
+            
+            
+            614
+            00:24:51,600 --> 00:24:51,800
+            
+            
+            615
+            00:24:52,200 --> 00:24:53,360
+            、最終結果是。
 * **Correction Priority:** When the audio clearly matches a word from the program title/description but ASR wrote something different, **trust the program metadata over the ASR text**.
 
 ### 2. CORE TRANSLATION & LOCALIZATION
