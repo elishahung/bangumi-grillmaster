@@ -70,18 +70,7 @@ def process_project(project_id: str) -> None:
         if not project.is_metadata_fetched:
             logger.info(f"Stage: Fetching metadata for {project_id}")
             video_data = get_video_info(project.source_url)
-            # If translation hint is not set:
-            # - bilibili: use the video title
-            # - tver: use the video title + description
-            if project.translation_hint is None:
-                if project.source == VideoSource.BILIBILI:
-                    project.translation_hint = video_data.title
-                elif project.source == VideoSource.TVER:
-                    project.translation_hint = (
-                        f"{video_data.title} - {video_data.description}"
-                    )
-
-            project.name = video_data.filename
+            project.update_from_video_info(video_data)
             project.mark_progress(ProgressStage.METADATA_FETCHED)
             logger.success("Stage complete: Metadata fetched")
         else:

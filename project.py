@@ -7,6 +7,7 @@ and translation.
 
 from pydantic import BaseModel, Field
 from pathlib import Path
+from datetime import datetime
 import json
 import shutil
 from enum import Enum
@@ -14,6 +15,7 @@ from loguru import logger
 from settings import settings
 import re
 from urllib.parse import urlparse
+from services.ytdlp.info import YtDlpVideoInfo
 
 PROJECT_ROOT_NAME = "projects"
 PROJECT_FILE_NAME = "project.json"
@@ -70,6 +72,7 @@ class Project(BaseModel):
     """
 
     id: str
+    created_at: datetime = Field(default_factory=datetime.now)
     name: str = Field(default="video")
     translation_hint: str | None = None
     asr_task_id: str | None = None
@@ -172,6 +175,27 @@ class Project(BaseModel):
         except Exception as e:
             logger.error(f"Failed to load project {id}: {e}")
             raise
+
+    def update_from_video_info(self, video_info: YtDlpVideoInfo) -> None:
+        """Update project from video information.
+
+        Updates the project name and translation hint from the video information.
+
+        Args:
+            video_info: The video information from yt-dlp.
+        """
+        self.name = video_info.filename
+        # If translation hint is not set:
+        # - bilibili: use the video title
+        # - other sources: use the video title + description
+        if self.translation_hint is None:
+            if self.source == VideoSource.BILIBILI:
+                self.translation_hint = video_info.title
+            else:
+                self.translation_hint = (
+                    f"{video_info.title} - {video_info.description}"
+                )
+        self.save()
 
     def save(self) -> None:
         """Save the current project state to disk as JSON.
