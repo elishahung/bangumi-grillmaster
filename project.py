@@ -20,8 +20,8 @@ PROJECT_FILE_NAME = "project.json"
 VIDEO_FILE_NAME = "video.mp4"
 AUDIO_FILE_NAME = "audio.opus"
 ASR_FILE_NAME = "asr.json"
-SRT_FILE_NAME = "asr.srt"
-TRANSLATED_FILE_NAME = "video.srt"
+SRT_FILE_NAME = "video.ja.srt"
+TRANSLATED_FILE_NAME = "video.zh-hant.srt"
 
 
 class ProgressStage(str, Enum):

@@ -38,7 +38,8 @@ def download_video(
         "writeinfojson": True,
         "outtmpl": {
             "default": f"{output_path}/%(playlist_index|0)s.%(ext)s",
-            "infojson": f"{output_path}/metadata",  # Metadata file name
+            "infojson": f"{output_path}/metadata",
+            "thumbnail": f"{output_path}/poster",
         },
         "merge_output_format": "mp4",
         "format": "bestvideo+bestaudio/best",
@@ -49,9 +50,9 @@ def download_video(
                 "when": "before_dl",
             },
             {
-                # Embed thumbnail into the video file (only supported for mp4, mkv, etc.)
+                # Embed thumbnail into the video file
                 "key": "EmbedThumbnail",
-                "already_have_thumbnail": False,
+                "already_have_thumbnail": True,
             },
             {
                 # Write metadata to the video file tags

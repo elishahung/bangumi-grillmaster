@@ -242,9 +242,9 @@ class Gemini:
         base_message = "請根據所附資料，將以下 SRT 文本翻譯為繁體中文。"
         if video_description:
             logger.debug(f"Adding video description to message")
-            base_message += f"\n節目介紹: {video_description}"
+            base_message += f"\n\n【節目標題/資訊】(請用此修正 ASR 錯誤):\n{video_description}"
 
-        base_message += f"\nSRT 文本:\n---\n{srt_text}"
+        base_message += f"\n\n【SRT 文本】(由 ASR 自動產生，可能有辨識錯誤):\n---\n{srt_text}"
         return base_message
 
     def create_chat(self):

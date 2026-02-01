@@ -104,7 +104,11 @@ class MediaProcessor:
             ).output(
                 str(output_file),
                 c="copy",
-            ).run()
+                map=0,
+                movflags="faststart",
+            ).run(
+                overwrite_output=True
+            )
 
             logger.debug("Cleaning up temporary and input files")
             os.remove(temp_file_path)
