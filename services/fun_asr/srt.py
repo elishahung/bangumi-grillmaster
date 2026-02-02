@@ -1,10 +1,11 @@
-"""
-Converter for Aliyun FunASR JSON to SRT format.
-"""
+"""Converter for FunASR JSON to SRT format with normalization."""
 
 import json
-from typing import Union
 from pathlib import Path
+from typing import Union
+
+from .models import FunASRResult, NormalizedTranscript
+from .normalize import normalize_transcript
 
 
 def ms_to_srt_time(ms: int) -> str:
@@ -18,47 +19,28 @@ def ms_to_srt_time(ms: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
 
-def convert_funasr_to_srt(data: dict, channel_id: int = 0) -> str:
+def convert_normalized_to_srt(transcript: NormalizedTranscript) -> str:
     """
-    Convert FunASR JSON response to SRT format.
+    Convert NormalizedTranscript to SRT format.
 
     Args:
-        data: The parsed JSON data from FunASR API
-        channel_id: Which channel to extract (default: 0)
+        transcript: The normalized transcript to convert
 
     Returns:
         SRT formatted string
     """
-    srt_lines = []
+    srt_lines: list[str] = []
 
-    transcripts = data.get("transcripts", [])
-
-    # Find the transcript for the specified channel
-    transcript = None
-    for t in transcripts:
-        if t.get("channel_id") == channel_id:
-            transcript = t
-            break
-
-    if not transcript:
-        return ""
-
-    sentences = transcript.get("sentences", [])
-
-    for idx, sentence in enumerate(sentences, start=1):
-        begin_time = sentence.get("begin_time", 0)
-        end_time = sentence.get("end_time", 0)
-        text = sentence.get("text", "")
-
-        if not text.strip():
+    for idx, sentence in enumerate(transcript.sentences, start=1):
+        if not sentence.text.strip():
             continue
 
-        start_str = ms_to_srt_time(begin_time)
-        end_str = ms_to_srt_time(end_time)
+        start_str = ms_to_srt_time(sentence.begin_time)
+        end_str = ms_to_srt_time(sentence.end_time)
 
         srt_lines.append(f"{idx}")
         srt_lines.append(f"{start_str} --> {end_str}")
-        srt_lines.append(text)
+        srt_lines.append(sentence.text)
         srt_lines.append("")  # Empty line between entries
 
     return "\n".join(srt_lines)
@@ -72,17 +54,25 @@ def convert_file(
     """
     Convert a FunASR JSON file to SRT format.
 
+    This function reads the raw FunASR JSON, normalizes it (merging dotted
+    sentences, splitting long ones), and converts to SRT format.
+
     Args:
-        input_path: Path to the input JSON file
+        input_path: Path to the FunASR JSON file
         output_path: Path to save the SRT file
-        channel_id: Which channel to extract (default: 0)
+        channel_id: Which audio channel to process (default: 0)
     """
     input_path = Path(input_path)
 
     with open(input_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        raw_data = json.load(f)
 
-    srt_content = convert_funasr_to_srt(data, channel_id)
+    # Parse and normalize
+    data = FunASRResult.model_validate(raw_data)
+    normalized = normalize_transcript(data, channel_id)
+
+    # Convert to SRT
+    srt_content = convert_normalized_to_srt(normalized)
 
     output_path = Path(output_path)
     with open(output_path, "w", encoding="utf-8") as f:

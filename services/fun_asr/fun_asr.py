@@ -73,6 +73,7 @@ class FunASR:
                 file_url,
             ],
             language_hints=["ja"],
+            diarization_enabled=True,
         )
         task_id = task_response.output.task_id
         logger.info(f"Transcription task submitted. Task ID: {task_id}")
@@ -131,6 +132,9 @@ class FunASR:
         """
         Convert a transcription JSON file to SRT subtitle format.
 
+        This method normalizes the ASR output (merging dotted sentences,
+        splitting long sentences) and converts to SRT format.
+
         Args:
             json_path: Path to the transcription JSON file.
             srt_path: Path where the SRT file will be saved.
@@ -142,6 +146,7 @@ class FunASR:
         logger.info(
             f"Converting transcription to SRT: {json_path} -> {srt_path}"
         )
+
         try:
             convert_file(json_path, srt_path)
             logger.success(f"Successfully converted to SRT: {srt_path}")
