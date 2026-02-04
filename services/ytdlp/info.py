@@ -19,9 +19,10 @@ class YtDlpVideoInfo(BaseModel):
         title: The video title.
         description: The video description text.
     """
+
     id: str
     title: str
-    description: str
+    description: str | None = None
 
     @property
     def filename(self) -> str:

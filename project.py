@@ -189,9 +189,11 @@ class Project(BaseModel):
         # - bilibili: use the video title
         # - other sources: use the video title + description
         if self.translation_hint is None:
-            if self.source == VideoSource.BILIBILI:
-                self.translation_hint = video_info.title
-            else:
+            self.translation_hint = video_info.title
+            if (
+                self.source != VideoSource.BILIBILI
+                and video_info.description is not None
+            ):
                 self.translation_hint = (
                     f"{video_info.title} - {video_info.description}"
                 )
