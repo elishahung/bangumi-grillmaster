@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     )
 
     fun_asr_model: str = Field(
-        default="fun-asr-2025-11-07",
+        default="fun-asr",
         description="Model identifier for ASR (Automatic Speech Recognition) processing",
     )
     gemini_model: str = Field(

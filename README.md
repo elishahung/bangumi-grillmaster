@@ -14,7 +14,7 @@
 
 ### ASR
 
-[豆包語音](https://www.volcengine.com/docs/6561/80909)效果最好，但還沒開放海外，走 API 需要認證無法。所以改採 FunASR (`fun-asr-2025-11-07`)，會有英文奇怪切割的狀況
+[豆包語音](https://www.volcengine.com/docs/6561/80909)效果最好，但還沒開放海外，走 API 需要認證無法。所以改採 FunASR (`fun-asr-2025-11-07`)，會有英文標點奇怪切割的狀況
 
 ### 翻譯
 
@@ -101,7 +101,7 @@ grill "https://www.bilibili.com/video/BV18KBJBeEmV"
 ```env
 # Alibaba DashScope (FunASR)
 DASHSCOPE_API_KEY=sk-xxx
-FUN_ASR_MODEL=fun-asr-2025-11-07
+FUN_ASR_MODEL=fun-asr
 
 # Alibaba OSS (暫存音檔)
 OSS_REGION=cn-beijing
