@@ -1,0 +1,29 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.2/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!**/.venv",
+      "!**/node_modules",
+      "!**/projects",
+      "!**/.next",
+      "!**/drizzle/meta"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "trailingCommas": "all"
+    }
+  }
+}

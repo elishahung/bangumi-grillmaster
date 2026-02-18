@@ -1,0 +1,392 @@
+import { db, initDb } from "@server/db/client";
+import {
+  projectsTable,
+  taskEventsTable,
+  tasksTable,
+  watchProgressTable,
+} from "@server/db/schema";
+import type {
+  ProjectDetail,
+  ProjectRow,
+  TaskDetail,
+  TaskEventRow,
+  TaskRow,
+  WatchProgressRow,
+} from "@shared/view-models";
+import { and, desc, eq } from "drizzle-orm";
+
+const now = () => Date.now();
+
+const toProjectRow = (row: typeof projectsTable.$inferSelect): ProjectRow => ({
+  _id: row.id,
+  projectId: row.projectId,
+  source: row.source,
+  sourceVideoId: row.sourceVideoId,
+  originalInput: row.originalInput,
+  translationHint: row.translationHint ?? undefined,
+  status: row.status,
+  title: row.title ?? undefined,
+  thumbnailUrl: row.thumbnailUrl ?? undefined,
+  sourceUrl: row.sourceUrl ?? undefined,
+  mediaPath: row.mediaPath ?? undefined,
+  subtitlePath: row.subtitlePath ?? undefined,
+  llmCostTwd: row.llmCostTwd,
+  llmProvider: row.llmProvider ?? undefined,
+  llmModel: row.llmModel ?? undefined,
+  inputTokens: row.inputTokens ?? undefined,
+  outputTokens: row.outputTokens ?? undefined,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+});
+
+const toTaskRow = (row: typeof tasksTable.$inferSelect): TaskRow => ({
+  _id: row.id,
+  taskId: row.taskId,
+  projectId: row.projectId,
+  type: row.type,
+  status: row.status,
+  currentStep: row.currentStep,
+  progressPercent: row.progressPercent,
+  message: row.message,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
+  startedAt: row.startedAt ?? undefined,
+  finishedAt: row.finishedAt ?? undefined,
+  errorMessage: row.errorMessage ?? undefined,
+});
+
+const toTaskEventRow = (
+  row: typeof taskEventsTable.$inferSelect,
+): TaskEventRow => ({
+  _id: row.id,
+  taskId: row.taskId,
+  projectId: row.projectId,
+  message: row.message,
+  percent: row.percent,
+  createdAt: row.createdAt,
+});
+
+const toWatchProgressRow = (
+  row: typeof watchProgressTable.$inferSelect,
+): WatchProgressRow => ({
+  _id: row.id,
+  projectId: row.projectId,
+  viewerId: row.viewerId,
+  positionSec: row.positionSec,
+  durationSec: row.durationSec,
+  updatedAt: row.updatedAt,
+});
+
+export const repository = {
+  init: () => initDb(),
+
+  submitProject: async (input: {
+    source: string;
+    sourceVideoId: string;
+    originalInput: string;
+    translationHint?: string;
+  }) => {
+    initDb();
+    const duplicated = await db
+      .select({ projectId: projectsTable.projectId })
+      .from(projectsTable)
+      .where(
+        and(
+          eq(projectsTable.source, input.source),
+          eq(projectsTable.sourceVideoId, input.sourceVideoId),
+        ),
+      )
+      .limit(1);
+
+    if (duplicated.length > 0) {
+      throw new Error("Project already exists for this source and videoId");
+    }
+
+    const createdAt = now();
+    const projectId = crypto.randomUUID();
+    const taskId = crypto.randomUUID();
+
+    await db.insert(projectsTable).values({
+      id: crypto.randomUUID(),
+      projectId,
+      source: input.source,
+      sourceVideoId: input.sourceVideoId,
+      originalInput: input.originalInput,
+      translationHint: input.translationHint,
+      status: "queued",
+      llmCostTwd: 0,
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    await db.insert(tasksTable).values({
+      id: crypto.randomUUID(),
+      taskId,
+      projectId,
+      type: "pipeline",
+      status: "queued",
+      currentStep: "submit",
+      progressPercent: 0,
+      message: "Project submitted",
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    await db.insert(taskEventsTable).values({
+      id: crypto.randomUUID(),
+      taskId,
+      projectId,
+      message: "Project created and queued",
+      percent: 0,
+      createdAt,
+    });
+
+    return { projectId, taskId, status: "queued" as const };
+  },
+
+  listProjects: async (): Promise<ProjectRow[]> => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(projectsTable)
+      .orderBy(desc(projectsTable.createdAt))
+      .limit(200);
+    return rows.map(toProjectRow);
+  },
+
+  getProjectRuntime: async (projectId: string): Promise<ProjectRow | null> => {
+    initDb();
+    const row = await db
+      .select()
+      .from(projectsTable)
+      .where(eq(projectsTable.projectId, projectId))
+      .limit(1);
+
+    return row[0] ? toProjectRow(row[0]) : null;
+  },
+
+  getProjectById: async (projectId: string): Promise<ProjectDetail | null> => {
+    initDb();
+    const projectRows = await db
+      .select()
+      .from(projectsTable)
+      .where(eq(projectsTable.projectId, projectId))
+      .limit(1);
+
+    const project = projectRows[0];
+    if (!project) {
+      return null;
+    }
+
+    const taskRows = await db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.projectId, projectId))
+      .orderBy(desc(tasksTable.updatedAt))
+      .limit(20);
+
+    const progressRows = await db
+      .select()
+      .from(watchProgressTable)
+      .where(eq(watchProgressTable.projectId, projectId));
+
+    return {
+      ...toProjectRow(project),
+      tasks: taskRows.map(toTaskRow),
+      watchProgress: progressRows.map(toWatchProgressRow),
+    };
+  },
+
+  updateProjectFromPipeline: async (input: {
+    projectId: string;
+    status: string;
+    title?: string;
+    thumbnailUrl?: string;
+    sourceUrl?: string;
+    mediaPath?: string;
+    subtitlePath?: string;
+    llmCostTwd?: number;
+    llmProvider?: string;
+    llmModel?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+  }) => {
+    initDb();
+    const updatedAt = now();
+
+    await db
+      .update(projectsTable)
+      .set({
+        status: input.status,
+        title: input.title,
+        thumbnailUrl: input.thumbnailUrl,
+        sourceUrl: input.sourceUrl,
+        mediaPath: input.mediaPath,
+        subtitlePath: input.subtitlePath,
+        llmCostTwd: input.llmCostTwd,
+        llmProvider: input.llmProvider,
+        llmModel: input.llmModel,
+        inputTokens: input.inputTokens,
+        outputTokens: input.outputTokens,
+        updatedAt,
+      })
+      .where(eq(projectsTable.projectId, input.projectId));
+
+    return { ok: true };
+  },
+
+  listTasks: async (limit = 100): Promise<TaskRow[]> => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(tasksTable)
+      .orderBy(desc(tasksTable.updatedAt))
+      .limit(limit);
+    return rows.map(toTaskRow);
+  },
+
+  getTaskById: async (taskId: string): Promise<TaskDetail | null> => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.taskId, taskId))
+      .limit(1);
+
+    const task = rows[0];
+    if (!task) {
+      return null;
+    }
+
+    const eventRows = await db
+      .select()
+      .from(taskEventsTable)
+      .where(eq(taskEventsTable.taskId, taskId))
+      .orderBy(desc(taskEventsTable.createdAt))
+      .limit(200);
+
+    return {
+      ...toTaskRow(task),
+      events: eventRows.map(toTaskEventRow),
+    };
+  },
+
+  updateTaskProgress: async (input: {
+    taskId: string;
+    status: string;
+    step: string;
+    percent: number;
+    message: string;
+    errorMessage?: string;
+  }) => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.taskId, input.taskId))
+      .limit(1);
+
+    const task = rows[0];
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    const updatedAt = now();
+
+    await db
+      .update(tasksTable)
+      .set({
+        status: input.status,
+        currentStep: input.step,
+        progressPercent: input.percent,
+        message: input.message,
+        updatedAt,
+        startedAt: task.startedAt ?? updatedAt,
+        finishedAt:
+          input.status === "completed" || input.status === "failed"
+            ? updatedAt
+            : null,
+        errorMessage: input.errorMessage,
+      })
+      .where(eq(tasksTable.id, task.id));
+
+    await db.insert(taskEventsTable).values({
+      id: crypto.randomUUID(),
+      taskId: task.taskId,
+      projectId: task.projectId,
+      message: input.message,
+      percent: input.percent,
+      createdAt: updatedAt,
+    });
+
+    return { ok: true };
+  },
+
+  retryTask: async (taskId: string) => {
+    initDb();
+    const task = await repository.getTaskById(taskId);
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    await repository.updateTaskProgress({
+      taskId: task.taskId,
+      status: "queued",
+      step: "retry",
+      percent: 0,
+      message: "Task retried and queued",
+    });
+
+    await repository.updateProjectFromPipeline({
+      projectId: task.projectId,
+      status: "queued",
+    });
+
+    return { taskId: task.taskId, projectId: task.projectId };
+  },
+
+  upsertWatchProgress: async (input: {
+    projectId: string;
+    viewerId: string;
+    positionSec: number;
+    durationSec: number;
+  }) => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(watchProgressTable)
+      .where(
+        and(
+          eq(watchProgressTable.projectId, input.projectId),
+          eq(watchProgressTable.viewerId, input.viewerId),
+        ),
+      )
+      .limit(1);
+
+    const updatedAt = now();
+
+    if (rows[0]) {
+      await db
+        .update(watchProgressTable)
+        .set({
+          positionSec: input.positionSec,
+          durationSec: input.durationSec,
+          updatedAt,
+        })
+        .where(eq(watchProgressTable.id, rows[0].id));
+
+      return { updated: true as const };
+    }
+
+    await db.insert(watchProgressTable).values({
+      id: crypto.randomUUID(),
+      projectId: input.projectId,
+      viewerId: input.viewerId,
+      positionSec: input.positionSec,
+      durationSec: input.durationSec,
+      updatedAt,
+    });
+
+    return { created: true as const };
+  },
+};
