@@ -100,9 +100,6 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
             srcLang={project.subtitlePath ? 'zh-TW' : 'en'}
           />
         </video>
-        <p className="mt-2 text-xs text-zinc-500">
-          播放進度每 5 秒同步到 SQLite watch_progress。
-        </p>
       </CardContent>
     </Card>
   );

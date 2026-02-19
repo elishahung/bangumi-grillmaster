@@ -40,5 +40,10 @@
       "trailingCommas": "all"
     }
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "extends": ["ultracite/biome/core", "ultracite/biome/next"]
 }

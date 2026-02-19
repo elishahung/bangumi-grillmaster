@@ -74,10 +74,7 @@ export default function TaskDetailPage() {
         <title>Task Detail | Bangumi GrillMaster</title>
       </Head>
       <section className="space-y-4">
-        <SectionHeading
-          description="任務狀態、錯誤與事件歷程。"
-          title="Task Detail"
-        />
+        <SectionHeading title="任務詳情" />
         {content}
       </section>
     </>

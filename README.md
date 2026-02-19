@@ -1,6 +1,6 @@
 # Bangumi GrillMaster Platform
 
-網頁全端平台：可提交影片任務、追蹤任務進度、播放影片與字幕並同步觀看進度。
+網頁全端平台：可提交影片下載轉譯中文字幕任務、追蹤任務進度、播放影片與字幕並同步觀看進度。
 
 ## Tech Stack
 
@@ -10,7 +10,7 @@
 - Database: `Drizzle ORM` + local `SQLite` (`better-sqlite3`)
 - Backend error/result flow: `neverthrow`
 - Validation: `zod v4` + `React Hook Form`
-- UI: `Tailwind CSS v4` + shadcn-style components
+- UI: `Tailwind CSS v4` + shadcn/ui (CSS variable theming, Zinc base color)
 - Code quality: `Biome` + `Ultracite`
 
 ## Core Architecture
@@ -21,6 +21,15 @@
 - ASR / 翻譯由 TypeScript provider 實作（`FunASR + Gemini`）
 - 以 `source + sourceVideoId` 做重複提交檢查
 - 創建新元件請優先考慮使用 `pnpm dlx shadcn@latest add [component]`
+
+## Theming
+
+採用 [shadcn/ui CSS variable theming](https://ui.shadcn.com/docs/theming)，Zinc base color。
+
+- 所有設計 token 定義於 `styles/globals.css`（`:root` = light, `.dark` = dark）
+- Tailwind v4 透過 `@theme inline` 將 CSS variables 映射為 `bg-background`、`text-foreground` 等 utility class
+- 新增 shadcn 元件時無需額外設定，`bg-background`、`text-muted-foreground` 等 class 皆已可用
+- 遵循 `background` / `foreground` 慣例：`--primary` 用於背景色、`--primary-foreground` 用於文字色
 
 ## Features
 

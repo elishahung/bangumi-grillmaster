@@ -16,7 +16,7 @@ export default function ProjectsPage() {
       </Head>
       <section className="space-y-4">
         <SectionHeading
-          description="已完成或進行中的影片專案。"
+          description="所有影片與字幕翻譯進度"
           title="Converted Videos"
         />
         {projectsQuery.isLoading ? (

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', label: 'Submit' },
+  { href: '/', label: '首頁' },
   { href: '/projects', label: 'Projects' },
   { href: '/tasks', label: 'Tasks' },
 ];
@@ -15,9 +15,9 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f7f7f5,_#eef2f7_60%,_#e8ecf3)] text-zinc-900">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-        <h1 className="font-semibold text-lg tracking-tight">
-          Bangumi GrillMaster Platform
-        </h1>
+        <Link href="/">
+          <h1 className="font-semibold text-lg tracking-tight">GrillMaster</h1>
+        </Link>
         <nav className="flex gap-1 rounded-full border border-zinc-300 bg-white/80 p-1 backdrop-blur">
           {navItems.map((item) => (
             <Link

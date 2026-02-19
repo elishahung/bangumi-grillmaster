@@ -26,16 +26,11 @@ export const TaskEventsList = ({ events }: { events: TaskEventRow[] }) => (
             className="rounded-md border border-zinc-200 p-3"
             key={event._id}
           >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Badge variant={getBadgeVariant(event.level)}>
-                  {event.level}
-                </Badge>
-                <p className="font-medium text-xs text-zinc-500">
-                  {event.step}
-                </p>
-              </div>
-              <p className="text-xs text-zinc-500">{event.percent}%</p>
+            <div className="mb-2 flex items-center gap-2">
+              <Badge variant={getBadgeVariant(event.level)}>
+                {event.level}
+              </Badge>
+              <p className="font-medium text-xs text-zinc-500">{event.step}</p>
             </div>
             <p className="text-sm">{event.message}</p>
             {event.errorMessage ? (
