@@ -1,6 +1,6 @@
 # Bangumi GrillMaster Platform
 
-將原本 Python CLI 流程改為網頁全端平台：可提交影片任務、追蹤任務進度、播放影片與字幕並同步觀看進度。
+網頁全端平台：可提交影片任務、追蹤任務進度、播放影片與字幕並同步觀看進度。
 
 ## Tech Stack
 
@@ -9,7 +9,7 @@
 - API: `tRPC v11`
 - Database: `Drizzle ORM` + local `SQLite` (`better-sqlite3`)
 - Backend error/result flow: `neverthrow`
-- Validation: `zod v4`
+- Validation: `zod v4` + `React Hook Form`
 - UI: `Tailwind CSS v4` + shadcn-style components
 - Code quality: `Biome` + `Ultracite`
 
@@ -18,9 +18,9 @@
 - `Drizzle + SQLite` 儲存專案、任務、任務事件、觀看進度
 - `tRPC` 負責 submit project、查詢與更新 watch progress
 - Backend service / pipeline 使用 `neverthrow`（Result / ResultAsync）做錯誤流與重試控制
-- ASR / 翻譯由 TypeScript provider 實作（`FunASR + Gemini`），不再透過 Python command
-- `projectId` 使用 UUID（不再用影片 ID）
+- ASR / 翻譯由 TypeScript provider 實作（`FunASR + Gemini`）
 - 以 `source + sourceVideoId` 做重複提交檢查
+- 創建新元件請優先考慮使用 `pnpm dlx shadcn@latest add [component]`
 
 ## Features
 
