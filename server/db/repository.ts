@@ -32,6 +32,7 @@ const toProjectRow = (row: typeof projectsTable.$inferSelect): ProjectRow => ({
   sourceUrl: row.sourceUrl ?? undefined,
   mediaPath: row.mediaPath ?? undefined,
   subtitlePath: row.subtitlePath ?? undefined,
+  asrVttPath: row.asrVttPath ?? undefined,
   llmCostTwd: row.llmCostTwd,
   llmProvider: row.llmProvider ?? undefined,
   llmModel: row.llmModel ?? undefined,
@@ -289,6 +290,7 @@ export const repository = {
     sourceUrl?: string;
     mediaPath?: string;
     subtitlePath?: string;
+    asrVttPath?: string;
     llmCostTwd?: number;
     llmProvider?: string;
     llmModel?: string;
@@ -307,6 +309,7 @@ export const repository = {
         sourceUrl: input.sourceUrl,
         mediaPath: input.mediaPath,
         subtitlePath: input.subtitlePath,
+        asrVttPath: input.asrVttPath,
         llmCostTwd: input.llmCostTwd,
         llmProvider: input.llmProvider,
         llmModel: input.llmModel,
@@ -867,9 +870,10 @@ export const repository = {
       .where(eq(watchProgressTable.projectId, projectId));
 
     // Delete the project itself
-    await db.delete(projectsTable).where(eq(projectsTable.projectId, projectId));
+    await db
+      .delete(projectsTable)
+      .where(eq(projectsTable.projectId, projectId));
 
     return { ok: true as const };
   },
 };
-

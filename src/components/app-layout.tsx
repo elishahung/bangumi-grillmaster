@@ -1,15 +1,7 @@
 import Link from 'next/link';
-import { useRouter } from 'next/router';
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
-
-const navItems = [
-  { href: '/', label: 'Home' },
-];
 
 export const AppLayout = ({ children }: { children: ReactNode }) => {
-  const router = useRouter();
-
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">

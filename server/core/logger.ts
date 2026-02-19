@@ -51,16 +51,18 @@ export const createTaskLogger = (input: {
       return;
     }
 
-    repository.appendTaskEvent({
-      taskId: input.taskId,
-      projectId: input.projectId,
-      step: input.step,
-      eventType: level === 'error' ? 'error' : 'log',
-      level,
-      message: normalized,
-      percent: input.percent,
-      errorMessage,
-    }).catch(console.error);
+    repository
+      .appendTaskEvent({
+        taskId: input.taskId,
+        projectId: input.projectId,
+        step: input.step,
+        eventType: level === 'error' ? 'error' : 'log',
+        level,
+        message: normalized,
+        percent: input.percent,
+        errorMessage,
+      })
+      .catch(console.error);
   };
 
   return {

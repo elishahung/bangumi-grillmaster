@@ -3,8 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { trpc } from '@/lib/trpc';
 
-const EMPTY_VTT_TRACK =
-  'data:text/vtt;charset=utf-8,WEBVTT%0A%0A00:00:00.000%20--%3E%2000:00:00.500%0A';
+const DEFAULT_VIEWER_ID = 'default-owner';
+
+const SYNC_INTERVAL = 5000;
 
 export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
   const [viewerId, setViewerId] = useState<string>('');
@@ -12,16 +13,7 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
   const upsertMutation = trpc.upsertWatchProgress.useMutation();
 
   useEffect(() => {
-    const key = 'bgm_viewer_id';
-    const existing = window.localStorage.getItem(key);
-    if (existing) {
-      setViewerId(existing);
-      return;
-    }
-
-    const created = crypto.randomUUID();
-    window.localStorage.setItem(key, created);
-    setViewerId(created);
+    setViewerId(DEFAULT_VIEWER_ID);
   }, []);
 
   const mineProgress = useMemo(() => {
@@ -33,17 +25,27 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
     );
   }, [project.watchProgress, viewerId]);
 
+  const [hasInitialSeek, setHasInitialSeek] = useState(false);
+
   useEffect(() => {
     const video = videoRef.current;
-    if (!(video && mineProgress) || mineProgress.positionSec < 3) {
+    if (!(video && mineProgress) || hasInitialSeek) {
       return;
     }
-    video.currentTime = mineProgress.positionSec;
-  }, [mineProgress]);
+
+    if (mineProgress.positionSec > 0) {
+      video.currentTime = mineProgress.positionSec;
+    }
+    setHasInitialSeek(true);
+  }, [mineProgress, hasInitialSeek]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!(viewerId && videoRef.current)) {
+        return;
+      }
+
+      if (!hasInitialSeek) {
         return;
       }
 
@@ -61,15 +63,15 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
         positionSec: currentTime,
         durationSec: duration,
       });
-    }, 5000);
+    }, SYNC_INTERVAL);
 
     return () => window.clearInterval(timer);
-  }, [project.projectId, upsertMutation, viewerId]);
+  }, [project.projectId, upsertMutation, viewerId, hasInitialSeek]);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Video Player</CardTitle>
+        <CardTitle>Player</CardTitle>
       </CardHeader>
       <CardContent>
         <video
@@ -84,21 +86,24 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
               type="video/mp4"
             />
           ) : null}
-          <track
-            default
-            kind="captions"
-            label={
-              project.subtitlePath
-                ? 'Traditional Chinese'
-                : 'Captions unavailable'
-            }
-            src={
-              project.subtitlePath
-                ? `/api/projects/${project.subtitlePath}`
-                : EMPTY_VTT_TRACK
-            }
-            srcLang={project.subtitlePath ? 'zh-TW' : 'en'}
-          />
+          {project.subtitlePath && (
+            <track
+              default={!!project.subtitlePath}
+              kind="subtitles"
+              label="中文"
+              src={`/api/projects/${project.subtitlePath}`}
+              srcLang="zh-TW"
+            />
+          )}
+          {project.asrVttPath && (
+            <track
+              default={!project.subtitlePath}
+              kind="subtitles"
+              label="Japanese"
+              src={`/api/projects/${project.asrVttPath}`}
+              srcLang="ja"
+            />
+          )}
         </video>
       </CardContent>
     </Card>

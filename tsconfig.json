@@ -6,6 +6,7 @@
     "skipLibCheck": true,
     "strict": true,
     "noImplicitOverride": true,
+    "noUnusedLocals": true,
     "noUncheckedIndexedAccess": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,

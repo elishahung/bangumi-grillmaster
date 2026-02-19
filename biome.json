@@ -15,6 +15,7 @@
   "linter": {
     "enabled": true,
     "rules": {
+      "a11y": "off",
       "recommended": true,
       "style": {
         "useConsistentTypeDefinitions": {

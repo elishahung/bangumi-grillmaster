@@ -1,4 +1,5 @@
 import type { ProjectRow } from '@shared/view-models';
+import { PlayCircle } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { toProjectBadgeVariant } from '@/components/project/status';
@@ -6,7 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { formatDate } from '@/lib/format-date';
-import { PlayCircle } from 'lucide-react';
 
 export const ProjectGrid = ({
   projects,
@@ -18,7 +18,7 @@ export const ProjectGrid = ({
   if (projects.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">
+        <CardContent className="p-6 text-muted-foreground text-sm">
           {emptyText ?? 'No projects yet.'}
         </CardContent>
       </Card>
@@ -34,7 +34,7 @@ export const ProjectGrid = ({
         return (
           <Link
             className="group block overflow-hidden rounded-xl border border-border bg-card transition hover:border-ring hover:shadow-md"
-            href={`/projects/${project.projectId}`}
+            href={`/videos/${project.projectId}`}
             key={project._id}
           >
             <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-muted to-muted/80">
@@ -66,11 +66,11 @@ export const ProjectGrid = ({
                   </svg>
                 </div>
               )}
-              
+
               {isCompleted ? (
-                 <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
-                   <PlayCircle className="h-12 w-12 text-white drop-shadow-md" />
-                 </div>
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+                  <PlayCircle className="h-12 w-12 text-white drop-shadow-md" />
+                </div>
               ) : null}
 
               <div className="absolute top-2 right-2">
@@ -83,14 +83,15 @@ export const ProjectGrid = ({
             <div className="space-y-3 p-3">
               <div className="space-y-1">
                 <p className="line-clamp-2 font-semibold text-sm leading-snug">
-                  {project.title ?? `${project.source}:${project.sourceVideoId}`}
+                  {project.title ??
+                    `${project.source}:${project.sourceVideoId}`}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {formatDate(project.createdAt)}
                 </p>
               </div>
 
-               {!isCompleted && task && (
+              {!isCompleted && task && (
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
                     <span className="font-medium text-muted-foreground">
@@ -100,7 +101,7 @@ export const ProjectGrid = ({
                       {task.progressPercent}%
                     </span>
                   </div>
-                  <Progress value={task.progressPercent} className="h-1.5" />
+                  <Progress className="h-1.5" value={task.progressPercent} />
                 </div>
               )}
             </div>

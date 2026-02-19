@@ -1,10 +1,8 @@
 import Head from 'next/head';
-import Link from 'next/link';
 import { useState } from 'react';
 import { SectionHeading } from '@/components/layout/section-heading';
 import { ProjectGrid } from '@/components/project/project-grid';
 import { SubmitProjectDialog } from '@/components/project/submit-project-form';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { trpc } from '@/lib/trpc';
@@ -31,15 +29,15 @@ export default function HomePage() {
             <div className="flex items-center gap-4">
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="show-completed"
                   checked={showCompletedOnly}
+                  id="show-completed"
                   onCheckedChange={(checked: boolean | 'indeterminate') =>
                     setShowCompletedOnly(checked === true)
                   }
                 />
                 <Label
+                  className="font-medium text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   htmlFor="show-completed"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                 >
                   Show Completed Only
                 </Label>
@@ -47,14 +45,14 @@ export default function HomePage() {
               <SubmitProjectDialog />
             </div>
           }
-          title="All Projects"
+          title="All Videos"
         />
 
         {projectsQuery.isLoading ? (
           <p className="text-sm text-zinc-500">Loading...</p>
         ) : (
           <ProjectGrid
-            emptyText="No projects yet. Click '+ New Project' to start."
+            emptyText="No videos yet. Click '+ New Video' to start."
             projects={filteredProjects}
           />
         )}

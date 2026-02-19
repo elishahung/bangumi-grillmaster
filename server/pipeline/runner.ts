@@ -695,6 +695,24 @@ class TaskPipelineRunner {
       await runMockAsr(context.audioPath, context.asrSrtPath);
     }
 
+    try {
+      const srtContent = await fs.readFile(context.asrSrtPath, 'utf8');
+      const vttContent = srtToVtt(srtContent);
+      const asrVttPath = path.join(context.projectDir, 'asr.vtt');
+      await fs.writeFile(asrVttPath, vttContent, 'utf8');
+      await logger.info('Generated asr.vtt');
+
+      await repository.updateProjectFromPipeline({
+        projectId: context.item.projectId,
+        status: 'asr',
+        asrVttPath: `${context.item.projectId}/asr.vtt`,
+      });
+    } catch (error) {
+      await logger.warn(
+        `Failed to generate asr.vtt: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
     await logger.info('ASR step completed');
 
     return {

@@ -14,6 +14,7 @@ export type ProjectRow = {
   sourceVideoId: string;
   status: string;
   subtitlePath?: string;
+  asrVttPath?: string;
   thumbnailUrl?: string;
   title?: string;
   translationHint?: string;

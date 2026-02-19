@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `asr_vtt_path` text;

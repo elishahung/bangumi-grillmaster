@@ -218,17 +218,14 @@ export const runGeminiTranslate = (input: {
       });
 
       return ResultAsync.fromPromise(
-            chat.sendMessage({
-              message: [
-                createPartFromUri(
-                  uploadedUri,
-                  uploaded.mimeType ?? 'audio/ogg',
-                ),
-                userMessage,
-              ],
-            }),
-            (error) => toPipelineError('translate', error, true),
-          )
+        chat.sendMessage({
+          message: [
+            createPartFromUri(uploadedUri, uploaded.mimeType ?? 'audio/ogg'),
+            userMessage,
+          ],
+        }),
+        (error) => toPipelineError('translate', error, true),
+      )
         .andThen((firstResponse) =>
           continueTranslation(
             chat,

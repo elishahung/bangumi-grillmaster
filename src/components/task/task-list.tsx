@@ -10,7 +10,7 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
   if (tasks.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">
+        <CardContent className="p-6 text-muted-foreground text-sm">
           No tasks found.
         </CardContent>
       </Card>
@@ -33,12 +33,14 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
           </div>
           <Progress value={task.progressPercent} />
           {task.currentStep && task.currentStep !== task.status ? (
-            <p className="mt-2 text-xs text-muted-foreground">{task.currentStep}</p>
+            <p className="mt-2 text-muted-foreground text-xs">
+              {task.currentStep}
+            </p>
           ) : null}
           {task.errorMessage ? (
             <p className="mt-1 text-destructive text-xs">{task.errorMessage}</p>
           ) : null}
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-muted-foreground text-xs">
             {formatDate(task.createdAt)}
           </p>
         </Link>

@@ -22,6 +22,7 @@ export const projectsTable = sqliteTable(
     sourceUrl: text('source_url'),
     mediaPath: text('media_path'),
     subtitlePath: text('subtitle_path'),
+    asrVttPath: text('asr_vtt_path'),
     llmCostTwd: real('llm_cost_twd').notNull().default(0),
     llmProvider: text('llm_provider'),
     llmModel: text('llm_model'),

@@ -98,16 +98,14 @@ export const makeProjectService = () => ({
       infra(`upsertWatchProgress failed: ${String(error)}`),
     ),
 
-  deleteProject: (
-    projectId: string,
-  ): ResultAsync<{ ok: true }, ServiceError> =>
+  deleteProject: (projectId: string): ResultAsync<{ ok: true }, ServiceError> =>
     fromPromise(
       (async () => {
         // 1. Get project to confirm existence (and potentially get info for logging)
         const project = await repository.getProjectById(projectId);
         if (!project) {
-          // If project doesn't exist in DB, we still might want to try cleaning up folder, 
-          // but for now let's just return success or error. 
+          // If project doesn't exist in DB, we still might want to try cleaning up folder,
+          // but for now let's just return success or error.
           // If it's already gone, "delete" is technically successful or a no-op.
           // Let's treat it as a no-op success to be idempotent, or error if strict.
           // Given the requirement "project can be removed", if it's missing it's removed.
@@ -124,16 +122,18 @@ export const makeProjectService = () => ({
             'projects',
             `_deleted_${projectId}`,
           );
-          // If _deleted_ folder already exists, we might overwrite or error. 
+          // If _deleted_ folder already exists, we might overwrite or error.
           // Rename will likely fail if target exists and is non-empty or we might want to append ts.
           // For simplicity, let's assume simple rename.
           await fs.rename(projectDir, deletedDir);
         } catch (e) {
           // If folder doesn't exist, ignore (maybe it was manually deleted)
-          // If rename fails, we might want to throw or log. 
+          // If rename fails, we might want to throw or log.
           // But strict requirement: "if project folder exists, add _deleted_"
           if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-             throw new InfrastructureError(`Failed to rename project folder: ${String(e)}`);
+            throw new InfrastructureError(
+              `Failed to rename project folder: ${String(e)}`,
+            );
           }
         }
 
@@ -143,9 +143,10 @@ export const makeProjectService = () => ({
         return { ok: true as const };
       })(),
       (error) => {
-         if (error instanceof InfrastructureError) return error;
-         return infra(`deleteProject failed: ${String(error)}`);
-      }
+        if (error instanceof InfrastructureError) {
+          return error;
+        }
+        return infra(`deleteProject failed: ${String(error)}`);
+      },
     ),
 });
-
