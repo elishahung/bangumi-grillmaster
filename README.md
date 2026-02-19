@@ -70,7 +70,7 @@ OSS_BUCKET=your-bucket
 OSS_ACCESS_KEY_ID=xxx
 OSS_ACCESS_KEY_SECRET=xxx
 GEMINI_API_KEY=xxx
-GEMINI_MODEL=gemini-3-pro-preview
+GEMINI_MODEL=gemini-3.1-pro-preview
 ```
 
 ### 3. Start Next.js

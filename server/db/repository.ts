@@ -792,6 +792,16 @@ export const repository = {
     return { taskId: task.taskId, projectId: task.projectId };
   },
 
+  getInterruptedTasks: async (): Promise<TaskRow[]> => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(tasksTable)
+      .where(inArray(tasksTable.status, ['running', 'canceling']));
+
+    return rows.map(toTaskRow);
+  },
+
   upsertWatchProgress: async (input: {
     projectId: string;
     viewerId: string;

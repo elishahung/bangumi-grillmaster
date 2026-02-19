@@ -21,7 +21,7 @@ const modelPricingUsdPer1M: Record<
   { input: number; cacheHit: number; output: number }
 > = {
   'gemini-3-flash-preview': { input: 0.5, cacheHit: 0.1, output: 3 },
-  'gemini-3-pro-preview': { input: 2, cacheHit: 0.2, output: 12 },
+  'gemini-3.1-pro-preview': { input: 2, cacheHit: 0.2, output: 12 },
 };
 
 const calculateCostTwd = (
@@ -217,9 +217,7 @@ export const runGeminiTranslate = (input: {
         },
       });
 
-      return retryBackoff(
-        () =>
-          ResultAsync.fromPromise(
+      return ResultAsync.fromPromise(
             chat.sendMessage({
               message: [
                 createPartFromUri(
@@ -230,19 +228,7 @@ export const runGeminiTranslate = (input: {
               ],
             }),
             (error) => toPipelineError('translate', error, true),
-          ),
-        { maxRetries: 4, baseDelayMs: 800 },
-      )
-        .andThen(() =>
-          retryBackoff(
-            () =>
-              ResultAsync.fromPromise(
-                chat.sendMessage({ message: userMessage }),
-                (error) => toPipelineError('translate', error, true),
-              ),
-            { maxRetries: 4, baseDelayMs: 800 },
-          ),
-        )
+          )
         .andThen((firstResponse) =>
           continueTranslation(
             chat,

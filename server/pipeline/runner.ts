@@ -798,6 +798,63 @@ class TaskPipelineRunner {
       subtitlePath: `${context.item.projectId}/video.vtt`,
     };
   }
+
+  constructor() {
+    this.cleanupInterruptedTasks().catch((error) => {
+      console.error('Failed to cleanup interrupted tasks', error);
+    });
+  }
+
+  private async cleanupInterruptedTasks() {
+    const tasks = await repository.getInterruptedTasks();
+    if (tasks.length === 0) {
+      return;
+    }
+
+    console.log(`Found ${tasks.length} interrupted tasks, cleaning up...`);
+
+    for (const task of tasks) {
+      try {
+        if (task.status === 'running') {
+          await repository.updateTaskProgress({
+            taskId: task.taskId,
+            status: 'failed',
+            step: task.currentStep,
+            percent: task.progressPercent,
+            message: 'Task execution interrupted by server restart',
+            errorMessage: 'Server restart detected while task was running',
+            eventType: 'error',
+            level: 'error',
+          });
+
+          await repository.updateProjectFromPipeline({
+            projectId: task.projectId,
+            status: 'failed',
+          });
+
+          await repository.appendTaskEvent({
+            taskId: task.taskId,
+            projectId: task.projectId,
+            step: task.currentStep,
+            eventType: 'error',
+            level: 'error',
+            message: 'Task execution interrupted by server restart',
+            errorMessage: 'Server restart detected while task was running',
+            percent: task.progressPercent,
+          });
+        } else if (task.status === 'canceling') {
+          await repository.markTaskCanceled({
+            taskId: task.taskId,
+            reason: 'Task canceled by user (processed after restart)',
+            step: task.currentStep,
+            percent: task.progressPercent,
+          });
+        }
+      } catch (error) {
+        console.error(`Failed to cleanup task ${task.taskId}`, error);
+      }
+    }
+  }
 }
 
 let singleton: TaskPipelineRunner | null = null;

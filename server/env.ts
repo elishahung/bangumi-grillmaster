@@ -14,7 +14,7 @@ const EnvSchema = z.object({
   OSS_ACCESS_KEY_ID: z.string().optional(),
   OSS_ACCESS_KEY_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default('gemini-3-pro-preview'),
+  GEMINI_MODEL: z.string().default('gemini-3.1-pro-preview'),
   SQLITE_DB_PATH: z.string().default('data/grillmaster.db'),
 });
 
