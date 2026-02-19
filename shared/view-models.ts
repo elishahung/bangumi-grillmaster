@@ -18,6 +18,7 @@ export type ProjectRow = {
   title?: string;
   translationHint?: string;
   updatedAt: number;
+  task?: TaskRow | null; // Latest task
 };
 
 export type TaskRow = {

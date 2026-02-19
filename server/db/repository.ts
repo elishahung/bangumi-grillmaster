@@ -15,7 +15,7 @@ import type {
   TaskStepStateRow,
   WatchProgressRow,
 } from '@shared/view-models';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 
 const now = () => Date.now();
 
@@ -203,12 +203,39 @@ export const repository = {
 
   listProjects: async (): Promise<ProjectRow[]> => {
     initDb();
-    const rows = await db
+    const projects = await db
       .select()
       .from(projectsTable)
       .orderBy(desc(projectsTable.createdAt))
       .limit(200);
-    return rows.map(toProjectRow);
+
+    if (projects.length === 0) {
+      return [];
+    }
+
+    const tasks = await db
+      .select()
+      .from(tasksTable)
+      .where(
+        inArray(
+          tasksTable.projectId,
+          projects.map((p) => p.projectId),
+        ),
+      );
+
+    // Map latest task to project
+    const taskMap = new Map<string, TaskRow>();
+    for (const task of tasks) {
+      const existing = taskMap.get(task.projectId);
+      if (!existing || task.updatedAt > existing.updatedAt) {
+        taskMap.set(task.projectId, toTaskRow(task));
+      }
+    }
+
+    return projects.map((p) => ({
+      ...toProjectRow(p),
+      task: taskMap.get(p.projectId) ?? null,
+    }));
   },
 
   getProjectRuntime: async (projectId: string): Promise<ProjectRow | null> => {
@@ -772,7 +799,9 @@ export const repository = {
     durationSec: number;
   }) => {
     initDb();
-    const rows = await db
+    const updatedAt = now();
+
+    const existing = await db
       .select()
       .from(watchProgressTable)
       .where(
@@ -783,9 +812,7 @@ export const repository = {
       )
       .limit(1);
 
-    const updatedAt = now();
-
-    if (rows[0]) {
+    if (existing.length > 0) {
       await db
         .update(watchProgressTable)
         .set({
@@ -793,20 +820,46 @@ export const repository = {
           durationSec: input.durationSec,
           updatedAt,
         })
-        .where(eq(watchProgressTable.id, rows[0].id));
-
-      return { updated: true as const };
+        .where(eq(watchProgressTable.id, existing[0]!.id));
+    } else {
+      await db.insert(watchProgressTable).values({
+        id: crypto.randomUUID(),
+        projectId: input.projectId,
+        viewerId: input.viewerId,
+        positionSec: input.positionSec,
+        durationSec: input.durationSec,
+        updatedAt,
+      });
     }
 
-    await db.insert(watchProgressTable).values({
-      id: crypto.randomUUID(),
-      projectId: input.projectId,
-      viewerId: input.viewerId,
-      positionSec: input.positionSec,
-      durationSec: input.durationSec,
-      updatedAt,
-    });
+    return { ok: true as const };
+  },
 
-    return { created: true as const };
+  deleteProject: async (projectId: string) => {
+    initDb();
+
+    // Delete tasks associated with the project
+    await db.delete(tasksTable).where(eq(tasksTable.projectId, projectId));
+
+    // Delete task events associated with the project
+    await db
+      .delete(taskEventsTable)
+      .where(eq(taskEventsTable.projectId, projectId));
+
+    // Delete task step states associated with the project
+    await db
+      .delete(taskStepStatesTable)
+      .where(eq(taskStepStatesTable.projectId, projectId));
+
+    // Delete watch progress associated with the project
+    await db
+      .delete(watchProgressTable)
+      .where(eq(watchProgressTable.projectId, projectId));
+
+    // Delete the project itself
+    await db.delete(projectsTable).where(eq(projectsTable.projectId, projectId));
+
+    return { ok: true as const };
   },
 };
+

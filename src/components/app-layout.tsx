@@ -5,8 +5,6 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: 'Home' },
-  { href: '/projects', label: 'Projects' },
-  { href: '/tasks', label: 'Tasks' },
 ];
 
 export const AppLayout = ({ children }: { children: ReactNode }) => {
@@ -18,23 +16,6 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
         <Link href="/">
           <h1 className="font-semibold text-lg tracking-tight">GrillMaster</h1>
         </Link>
-        <nav className="flex gap-1 rounded-full border border-border bg-background/80 p-1 backdrop-blur">
-          {navItems.map((item) => (
-            <Link
-              className={cn(
-                'rounded-full px-4 py-1.5 text-sm transition font-medium',
-                router.pathname === item.href ||
-                  router.pathname.startsWith(`${item.href}/`)
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-              )}
-              href={item.href}
-              key={item.href}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
       </header>
       <main className="mx-auto w-full max-w-6xl px-4 pb-10 sm:px-6">
         {children}

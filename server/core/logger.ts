@@ -46,7 +46,12 @@ export const createTaskLogger = (input: {
       console.log(withColor(line));
     }
 
-    await repository.appendTaskEvent({
+    // Only record info, warn, and error levels to the database
+    if (level === 'trace' || level === 'debug') {
+      return;
+    }
+
+    repository.appendTaskEvent({
       taskId: input.taskId,
       projectId: input.projectId,
       step: input.step,
@@ -55,7 +60,7 @@ export const createTaskLogger = (input: {
       message: normalized,
       percent: input.percent,
       errorMessage,
-    });
+    }).catch(console.error);
   };
 
   return {

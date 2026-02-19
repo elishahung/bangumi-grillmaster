@@ -23,7 +23,7 @@ export const TaskEventsList = ({ events }: { events: TaskEventRow[] }) => (
       ) : (
         events.map((event) => (
           <div
-            className="rounded-md border border-border p-3"
+            className="rounded-md border border-border p-3 overflow-auto"
             key={event._id}
           >
             <div className="mb-2 flex items-center gap-2">

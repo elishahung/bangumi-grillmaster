@@ -107,6 +107,17 @@ export const appRouter = router({
         },
       );
     }),
+
+  deleteProject: publicProcedure
+    .input(z.object({ projectId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      return await ctx.projectService.deleteProject(input.projectId).match(
+        (value) => value,
+        (error) => {
+          throw createTrpcError(error);
+        },
+      );
+    }),
 });
 
 export type AppRouter = typeof appRouter;
