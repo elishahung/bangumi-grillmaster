@@ -10,7 +10,7 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
   if (tasks.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6 text-sm text-zinc-600">
+        <CardContent className="p-6 text-sm text-muted-foreground">
           尚無任務。
         </CardContent>
       </Card>
@@ -21,7 +21,7 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
     <div className="space-y-3">
       {tasks.map((task) => (
         <Link
-          className="block rounded-lg border border-zinc-200 bg-white p-4 transition hover:border-zinc-400 hover:shadow-sm"
+          className="block rounded-lg border border-border bg-card p-4 transition hover:border-ring hover:shadow-sm"
           href={`/tasks/${task.taskId}`}
           key={task._id}
         >
@@ -33,12 +33,12 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
           </div>
           <Progress value={task.progressPercent} />
           {task.currentStep && task.currentStep !== task.status ? (
-            <p className="mt-2 text-xs text-zinc-600">{task.currentStep}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{task.currentStep}</p>
           ) : null}
           {task.errorMessage ? (
-            <p className="mt-1 text-rose-700 text-xs">{task.errorMessage}</p>
+            <p className="mt-1 text-destructive text-xs">{task.errorMessage}</p>
           ) : null}
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="mt-1 text-xs text-muted-foreground">
             {formatDate(task.createdAt)}
           </p>
         </Link>

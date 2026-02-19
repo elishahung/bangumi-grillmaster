@@ -21,7 +21,7 @@ export const ProjectDetailHeader = ({
       </div>
     </CardHeader>
     <CardContent className="space-y-4">
-      <div className="grid gap-2 text-sm text-zinc-600 sm:grid-cols-2">
+      <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
         <p>Project ID: {project.projectId}</p>
         <p>Source: {project.source}</p>
         <p>Video ID: {project.sourceVideoId}</p>
@@ -29,7 +29,7 @@ export const ProjectDetailHeader = ({
       </div>
       {project.sourceUrl ? (
         <Link
-          className="text-blue-700 text-sm underline"
+          className="text-primary text-sm underline hover:text-primary/80"
           href={project.sourceUrl}
           target="_blank"
         >

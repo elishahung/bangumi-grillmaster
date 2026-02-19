@@ -16,7 +16,7 @@ export const ProjectGrid = ({
   if (projects.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6 text-sm text-zinc-600">
+        <CardContent className="p-6 text-sm text-muted-foreground">
           {emptyText ?? '尚未有影片。'}
         </CardContent>
       </Card>
@@ -27,11 +27,11 @@ export const ProjectGrid = ({
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {projects.map((project) => (
         <Link
-          className="group block overflow-hidden rounded-xl border border-zinc-200 bg-white transition hover:border-zinc-400 hover:shadow-md"
+          className="group block overflow-hidden rounded-xl border border-border bg-card transition hover:border-ring hover:shadow-md"
           href={`/projects/${project.projectId}`}
           key={project._id}
         >
-          <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-zinc-200 to-zinc-300">
+          <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-muted to-muted/80">
             {project.thumbnailUrl ? (
               <Image
                 alt={project.title ?? project.sourceVideoId}
@@ -41,7 +41,7 @@ export const ProjectGrid = ({
                 width={320}
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-zinc-400">
+              <div className="flex h-full w-full items-center justify-center text-muted-foreground/50">
                 <svg
                   aria-hidden="true"
                   className="size-10"
@@ -71,7 +71,7 @@ export const ProjectGrid = ({
             <p className="line-clamp-2 font-semibold text-sm leading-snug">
               {project.title ?? `${project.source}:${project.sourceVideoId}`}
             </p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               {formatDate(project.createdAt)}
             </p>
           </div>

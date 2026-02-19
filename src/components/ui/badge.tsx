@@ -7,11 +7,11 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        queued: 'bg-zinc-200 text-zinc-700',
-        running: 'bg-amber-100 text-amber-700',
-        completed: 'bg-emerald-100 text-emerald-700',
-        failed: 'bg-rose-100 text-rose-700',
-        default: 'bg-zinc-100 text-zinc-700',
+        queued: 'bg-secondary text-secondary-foreground',
+        running: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
+        completed: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+        failed: 'bg-destructive/15 text-destructive dark:text-destructive-foreground',
+        default: 'bg-secondary text-secondary-foreground',
       },
     },
     defaultVariants: {

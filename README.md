@@ -134,3 +134,7 @@ src/
 styles/
 projects/
 ```
+
+## Design & Language Policy
+
+- All UI text must be in English.

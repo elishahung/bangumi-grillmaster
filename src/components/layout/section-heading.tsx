@@ -23,7 +23,7 @@ export const SectionHeading = ({
         {title}
       </h2>
       {description ? (
-        <p className="text-sm text-zinc-600">{description}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
       ) : null}
     </div>
     {actions ? <div>{actions}</div> : null}

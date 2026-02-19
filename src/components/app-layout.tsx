@@ -13,20 +13,20 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f7f7f5,_#eef2f7_60%,_#e8ecf3)] text-zinc-900">
+    <div className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
         <Link href="/">
           <h1 className="font-semibold text-lg tracking-tight">GrillMaster</h1>
         </Link>
-        <nav className="flex gap-1 rounded-full border border-zinc-300 bg-white/80 p-1 backdrop-blur">
+        <nav className="flex gap-1 rounded-full border border-border bg-background/80 p-1 backdrop-blur">
           {navItems.map((item) => (
             <Link
               className={cn(
-                'rounded-full px-4 py-1.5 text-sm transition',
+                'rounded-full px-4 py-1.5 text-sm transition font-medium',
                 router.pathname === item.href ||
                   router.pathname.startsWith(`${item.href}/`)
-                  ? 'bg-zinc-900 text-zinc-50'
-                  : 'text-zinc-600 hover:bg-zinc-100',
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
               )}
               href={item.href}
               key={item.href}

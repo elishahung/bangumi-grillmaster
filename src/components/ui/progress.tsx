@@ -12,12 +12,12 @@ export const Progress = ({
   return (
     <div
       className={cn(
-        'h-2 w-full overflow-hidden rounded-full bg-zinc-200',
+        'h-2 w-full overflow-hidden rounded-full bg-secondary',
         className,
       )}
     >
       <div
-        className="h-full bg-zinc-900 transition-all"
+        className="h-full bg-primary transition-all"
         style={{ width: `${width}%` }}
       />
     </div>

@@ -73,7 +73,7 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
       </CardHeader>
       <CardContent>
         <video
-          className="w-full rounded-lg border border-zinc-300 bg-black"
+          className="w-full rounded-lg border border-border bg-black"
           controls
           poster={project.thumbnailUrl}
           ref={videoRef}

@@ -27,10 +27,10 @@ export const TaskDetailPanel = ({
     </CardHeader>
     <CardContent className="space-y-3">
       <Progress value={task.progressPercent} />
-      <p className="text-sm text-zinc-600">{task.message}</p>
-      <p className="text-xs text-zinc-500">projectId: {task.projectId}</p>
+      <p className="text-sm text-muted-foreground">{task.message}</p>
+      <p className="text-xs text-muted-foreground">projectId: {task.projectId}</p>
       {task.errorMessage ? (
-        <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-rose-800 text-sm">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive sm:text-destructive-foreground text-sm">
           {task.errorMessage}
         </div>
       ) : null}
