@@ -1,11 +1,11 @@
-import type React from 'react';
+import type React from 'react'
 
 type FormFieldProps = {
-  children: React.ReactNode;
-  error?: string;
-  htmlFor: string;
-  label: string;
-};
+  children: React.ReactNode
+  error?: string
+  htmlFor: string
+  label: string
+}
 
 export const FormField = ({
   children,
@@ -20,4 +20,4 @@ export const FormField = ({
     {children}
     {error ? <p className="text-rose-600 text-xs">{error}</p> : null}
   </div>
-);
+)

@@ -1,10 +1,10 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { SubmitProjectInputSchema } from '@shared/domain';
-import Link from 'next/link';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import type { z } from 'zod';
-import { Button } from '@/components/ui/button';
+import { zodResolver } from '@hookform/resolvers/zod'
+import { SubmitProjectInputSchema } from '@shared/domain'
+import Link from 'next/link'
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import type { z } from 'zod'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -12,18 +12,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
-import { FormField } from '@/components/ui/form-field';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { trpc } from '@/lib/trpc';
+} from '@/components/ui/dialog'
+import { FormField } from '@/components/ui/form-field'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { trpc } from '@/lib/trpc'
 
-type FormValues = z.input<typeof SubmitProjectInputSchema>;
+type FormValues = z.input<typeof SubmitProjectInputSchema>
 
 const SubmitForm = ({
   onSuccess,
 }: {
-  onSuccess: (projectId: string) => void;
+  onSuccess: (projectId: string) => void
 }) => {
   const {
     formState: { errors, isValid },
@@ -34,8 +34,8 @@ const SubmitForm = ({
     defaultValues: { sourceOrUrl: '', translationHint: '' },
     mode: 'onChange',
     resolver: zodResolver(SubmitProjectInputSchema),
-  });
-  const submitMutation = trpc.submitProject.useMutation();
+  })
+  const submitMutation = trpc.submitProject.useMutation()
 
   const onSubmit = (data: FormValues) => {
     submitMutation.mutate(
@@ -45,12 +45,12 @@ const SubmitForm = ({
       },
       {
         onSuccess: (result) => {
-          reset();
-          onSuccess(result.projectId);
+          reset()
+          onSuccess(result.projectId)
         },
       },
-    );
-  };
+    )
+  }
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
@@ -77,7 +77,7 @@ const SubmitForm = ({
         />
       </FormField>
       <Button disabled={!isValid || submitMutation.isPending} type="submit">
-        {submitMutation.isPending ? 'Submitting...' : 'Start Translation'}
+        {submitMutation.isPending ? 'Submitting...' : 'Submit'}
       </Button>
       {submitMutation.data ? (
         <div className="space-y-1 text-emerald-700 text-sm">
@@ -94,26 +94,26 @@ const SubmitForm = ({
         <p className="text-rose-700 text-sm">{submitMutation.error.message}</p>
       ) : null}
     </form>
-  );
-};
+  )
+}
 
 export const SubmitProjectDialog = () => {
-  const [open, setOpen] = useState(false);
-  const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false)
+  const utils = trpc.useUtils()
 
   const handleSuccess = (_projectId: string) => {
-    utils.listProjects.invalidate().then(() => undefined);
-    setTimeout(() => setOpen(false), 1200);
-  };
+    utils.listProjects.invalidate().then(() => undefined)
+    setOpen(false)
+  }
 
   return (
     <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger asChild>
-        <Button size="sm">+ New Project</Button>
+        <Button size="sm">+ New Video</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New Translation Task</DialogTitle>
+          <DialogTitle>New Video</DialogTitle>
           <DialogDescription>
             Paste video URL or ID to add a new subtitle translation task
           </DialogDescription>
@@ -121,5 +121,5 @@ export const SubmitProjectDialog = () => {
         <SubmitForm onSuccess={handleSuccess} />
       </DialogContent>
     </Dialog>
-  );
-};
+  )
+}

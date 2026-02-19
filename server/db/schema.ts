@@ -5,7 +5,7 @@ import {
   sqliteTable,
   text,
   uniqueIndex,
-} from 'drizzle-orm/sqlite-core';
+} from 'drizzle-orm/sqlite-core'
 
 export const projectsTable = sqliteTable(
   'projects',
@@ -38,7 +38,7 @@ export const projectsTable = sqliteTable(
     ),
     index('projects_created_at_idx').on(table.createdAt),
   ],
-);
+)
 
 export const tasksTable = sqliteTable(
   'tasks',
@@ -63,7 +63,7 @@ export const tasksTable = sqliteTable(
     index('tasks_project_id_idx').on(table.projectId),
     index('tasks_updated_at_idx').on(table.updatedAt),
   ],
-);
+)
 
 export const taskEventsTable = sqliteTable(
   'task_events',
@@ -84,7 +84,7 @@ export const taskEventsTable = sqliteTable(
     index('task_events_task_id_idx').on(table.taskId),
     index('task_events_project_id_idx').on(table.projectId),
   ],
-);
+)
 
 export const taskStepStatesTable = sqliteTable(
   'task_step_states',
@@ -108,7 +108,7 @@ export const taskStepStatesTable = sqliteTable(
     index('task_step_states_task_id_idx').on(table.taskId),
     index('task_step_states_project_id_idx').on(table.projectId),
   ],
-);
+)
 
 export const watchProgressTable = sqliteTable(
   'watch_progress',
@@ -127,4 +127,4 @@ export const watchProgressTable = sqliteTable(
     ),
     index('watch_progress_project_id_idx').on(table.projectId),
   ],
-);
+)

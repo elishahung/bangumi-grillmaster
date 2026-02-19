@@ -1,60 +1,60 @@
-import type { ProjectDetail } from '@shared/view-models';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { trpc } from '@/lib/trpc';
+import { DEFAULT_VIEWER_ID } from '@shared/constants'
+import type { ProjectDetail } from '@shared/view-models'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { trpc } from '@/lib/trpc'
 
-const DEFAULT_VIEWER_ID = 'default-owner';
-
-const SYNC_INTERVAL = 5000;
+const SYNC_INTERVAL = 5000
 
 export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
-  const [viewerId, setViewerId] = useState<string>('');
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const upsertMutation = trpc.upsertWatchProgress.useMutation();
+  const [viewerId, setViewerId] = useState<string>('')
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const upsertMutation = trpc.upsertWatchProgress.useMutation()
 
   useEffect(() => {
-    setViewerId(DEFAULT_VIEWER_ID);
-  }, []);
+    setViewerId(DEFAULT_VIEWER_ID)
+  }, [])
 
   const mineProgress = useMemo(() => {
     if (!viewerId) {
-      return null;
+      return null
     }
     return (
       project.watchProgress.find((row) => row.viewerId === viewerId) ?? null
-    );
-  }, [project.watchProgress, viewerId]);
+    )
+  }, [project.watchProgress, viewerId])
 
-  const [hasInitialSeek, setHasInitialSeek] = useState(false);
+  const [hasInitialSeek, setHasInitialSeek] = useState(false)
 
   useEffect(() => {
-    const video = videoRef.current;
+    const video = videoRef.current
     if (!(video && mineProgress) || hasInitialSeek) {
-      return;
+      return
     }
 
     if (mineProgress.positionSec > 0) {
-      video.currentTime = mineProgress.positionSec;
+      video.currentTime = mineProgress.positionSec
     }
-    setHasInitialSeek(true);
-  }, [mineProgress, hasInitialSeek]);
+    setHasInitialSeek(true)
+  }, [mineProgress, hasInitialSeek])
 
   useEffect(() => {
+    const videoElement = videoRef.current
+    if (!(viewerId && videoElement)) {
+      return
+    }
+
+    if (!hasInitialSeek) {
+      return
+    }
+
     const timer = window.setInterval(() => {
-      if (!(viewerId && videoRef.current)) {
-        return;
-      }
-
-      if (!hasInitialSeek) {
-        return;
-      }
-
-      const { currentTime, duration } = videoRef.current;
+      const { currentTime, duration } = videoElement
       if (
         !(Number.isFinite(currentTime) && Number.isFinite(duration)) ||
         duration <= 0
       ) {
-        return;
+        return
       }
 
       upsertMutation.mutate({
@@ -62,11 +62,11 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
         viewerId,
         positionSec: currentTime,
         durationSec: duration,
-      });
-    }, SYNC_INTERVAL);
+      })
+    }, SYNC_INTERVAL)
 
-    return () => window.clearInterval(timer);
-  }, [project.projectId, upsertMutation, viewerId, hasInitialSeek]);
+    return () => window.clearInterval(timer)
+  }, [project.projectId, upsertMutation, viewerId, hasInitialSeek])
 
   return (
     <Card>
@@ -107,5 +107,5 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
         </video>
       </CardContent>
     </Card>
-  );
-};
+  )
+}

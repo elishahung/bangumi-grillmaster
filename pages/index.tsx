@@ -1,22 +1,31 @@
-import Head from 'next/head';
-import { useState } from 'react';
-import { SectionHeading } from '@/components/layout/section-heading';
-import { ProjectGrid } from '@/components/project/project-grid';
-import { SubmitProjectDialog } from '@/components/project/submit-project-form';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { trpc } from '@/lib/trpc';
+import Head from 'next/head'
+import { useState } from 'react'
+import { SectionHeading } from '@/components/layout/section-heading'
+import { ProjectGrid } from '@/components/project/project-grid'
+import { SubmitProjectDialog } from '@/components/project/submit-project-form'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import { trpc } from '@/lib/trpc'
 
 export default function HomePage() {
-  const [showCompletedOnly, setShowCompletedOnly] = useState(false);
+  const [showCompletedOnly, setShowCompletedOnly] = useState(false)
   const projectsQuery = trpc.listProjects.useQuery(undefined, {
-    refetchInterval: 5000,
-  });
+    refetchInterval: (query) => {
+      if (
+        query.state.data?.every(
+          (p) => p.status === 'completed' || p.status === 'failed',
+        )
+      ) {
+        return false
+      }
+      return 10_000
+    },
+  })
 
-  const projects = projectsQuery.data ?? [];
+  const projects = projectsQuery.data ?? []
   const filteredProjects = showCompletedOnly
     ? projects.filter((p) => p.status === 'completed')
-    : projects;
+    : projects
 
   return (
     <>
@@ -58,5 +67,5 @@ export default function HomePage() {
         )}
       </div>
     </>
-  );
+  )
 }

@@ -1,16 +1,16 @@
-import type { TaskEventRow } from '@shared/view-models';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { TaskEventRow } from '@shared/view-models'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const getBadgeVariant = (level: TaskEventRow['level']) => {
   if (level === 'error') {
-    return 'failed';
+    return 'failed'
   }
   if (level === 'warn') {
-    return 'running';
+    return 'running'
   }
-  return 'default';
-};
+  return 'default'
+}
 
 export const TaskEventsList = ({ events }: { events: TaskEventRow[] }) => (
   <Card>
@@ -51,4 +51,4 @@ export const TaskEventsList = ({ events }: { events: TaskEventRow[] }) => (
       )}
     </CardContent>
   </Card>
-);
+)

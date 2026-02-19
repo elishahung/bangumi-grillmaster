@@ -1,9 +1,9 @@
-import type { TaskDetail } from '@shared/view-models';
-import { toTaskBadgeVariant } from '@/components/task/status';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
+import type { TaskDetail } from '@shared/view-models'
+import { toTaskBadgeVariant } from '@/components/task/status'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
 
 export const TaskDetailPanel = ({
   task,
@@ -12,11 +12,11 @@ export const TaskDetailPanel = ({
   retrying,
   canceling,
 }: {
-  task: TaskDetail;
-  onRetry: () => void;
-  onCancel: () => void;
-  retrying: boolean;
-  canceling: boolean;
+  task: TaskDetail
+  onRetry: () => void
+  onCancel: () => void
+  retrying: boolean
+  canceling: boolean
 }) => (
   <Card>
     <CardHeader>
@@ -60,4 +60,4 @@ export const TaskDetailPanel = ({
       ) : null}
     </CardContent>
   </Card>
-);
+)

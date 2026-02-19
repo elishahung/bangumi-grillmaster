@@ -1,7 +1,7 @@
-import { getTaskPipelineRunner } from '@server/pipeline/runner';
-import { createTrpcError, publicProcedure, router } from '@server/trpc/trpc';
-import { SubmitProjectInputSchema } from '@shared/domain';
-import { z } from 'zod';
+import { getTaskPipelineRunner } from '@server/pipeline/runner'
+import { createTrpcError, publicProcedure, router } from '@server/trpc/trpc'
+import { SubmitProjectInputSchema } from '@shared/domain'
+import { z } from 'zod'
 
 export const appRouter = router({
   submitProject: publicProcedure
@@ -10,24 +10,24 @@ export const appRouter = router({
       const result = await ctx.projectService.submitProject(input).match(
         (value) => value,
         (error) => {
-          throw createTrpcError(error);
+          throw createTrpcError(error)
         },
-      );
+      )
 
       getTaskPipelineRunner().enqueue({
         taskId: result.taskId,
         projectId: result.projectId,
-      });
-      return result;
+      })
+      return result
     }),
 
   listProjects: publicProcedure.query(async ({ ctx }) => {
     return await ctx.projectService.listProjects().match(
       (value) => value,
       (error) => {
-        throw createTrpcError(error);
+        throw createTrpcError(error)
       },
-    );
+    )
   }),
 
   projectById: publicProcedure
@@ -36,9 +36,9 @@ export const appRouter = router({
       return await ctx.projectService.getProjectById(input.projectId).match(
         (value) => value,
         (error) => {
-          throw createTrpcError(error);
+          throw createTrpcError(error)
         },
-      );
+      )
     }),
 
   listTasks: publicProcedure
@@ -49,9 +49,9 @@ export const appRouter = router({
       return await ctx.projectService.listTasks(input?.limit).match(
         (value) => value,
         (error) => {
-          throw createTrpcError(error);
+          throw createTrpcError(error)
         },
-      );
+      )
     }),
 
   taskById: publicProcedure
@@ -60,9 +60,9 @@ export const appRouter = router({
       return await ctx.projectService.getTaskById(input.taskId).match(
         (value) => value,
         (error) => {
-          throw createTrpcError(error);
+          throw createTrpcError(error)
         },
-      );
+      )
     }),
 
   retryTask: publicProcedure
@@ -71,12 +71,12 @@ export const appRouter = router({
       const result = await ctx.projectService.retryTask(input.taskId).match(
         (value) => value,
         (error) => {
-          throw createTrpcError(error);
+          throw createTrpcError(error)
         },
-      );
+      )
 
-      getTaskPipelineRunner().enqueue(result);
-      return { ok: true };
+      getTaskPipelineRunner().enqueue(result)
+      return { ok: true }
     }),
 
   cancelTask: publicProcedure
@@ -85,9 +85,9 @@ export const appRouter = router({
       return await ctx.projectService.cancelTask(input.taskId).match(
         (value) => value,
         (error) => {
-          throw createTrpcError(error);
+          throw createTrpcError(error)
         },
-      );
+      )
     }),
 
   upsertWatchProgress: publicProcedure
@@ -103,9 +103,9 @@ export const appRouter = router({
       return await ctx.projectService.upsertWatchProgress(input).match(
         (value) => value,
         (error) => {
-          throw createTrpcError(error);
+          throw createTrpcError(error)
         },
-      );
+      )
     }),
 
   deleteProject: publicProcedure
@@ -114,10 +114,10 @@ export const appRouter = router({
       return await ctx.projectService.deleteProject(input.projectId).match(
         (value) => value,
         (error) => {
-          throw createTrpcError(error);
+          throw createTrpcError(error)
         },
-      );
+      )
     }),
-});
+})
 
-export type AppRouter = typeof appRouter;
+export type AppRouter = typeof appRouter

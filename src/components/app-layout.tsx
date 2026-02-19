@@ -1,5 +1,5 @@
-import Link from 'next/link';
-import type { ReactNode } from 'react';
+import Link from 'next/link'
+import type { ReactNode } from 'react'
 
 export const AppLayout = ({ children }: { children: ReactNode }) => {
   return (
@@ -13,5 +13,5 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
         {children}
       </main>
     </div>
-  );
-};
+  )
+}

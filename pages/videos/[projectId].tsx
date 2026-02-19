@@ -1,18 +1,18 @@
-import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
-import Head from 'next/head';
-import { useRouter } from 'next/router';
-import { useState } from 'react';
-import { SectionHeading } from '@/components/layout/section-heading';
-import { ProjectDetailHeader } from '@/components/project/project-detail-header';
-import { TaskDetailPanel } from '@/components/task/task-detail-panel';
-import { TaskEventsList } from '@/components/task/task-events-list';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import Head from 'next/head'
+import { useRouter } from 'next/router'
+import { useState } from 'react'
+import { SectionHeading } from '@/components/layout/section-heading'
+import { ProjectDetailHeader } from '@/components/project/project-detail-header'
+import { TaskDetailPanel } from '@/components/task/task-detail-panel'
+import { TaskEventsList } from '@/components/task/task-events-list'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+} from '@/components/ui/collapsible'
 import {
   Dialog,
   DialogClose,
@@ -22,36 +22,47 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog';
-import { ProjectPlayerCard } from '@/components/video/project-player-card';
-import { trpc } from '@/lib/trpc';
-import { cn } from '@/lib/utils';
+} from '@/components/ui/dialog'
+import { ProjectPlayerCard } from '@/components/video/project-player-card'
+import { trpc } from '@/lib/trpc'
+import { cn } from '@/lib/utils'
 
 export default function ProjectDetailPage() {
-  const router = useRouter();
+  const router = useRouter()
   const projectId =
-    typeof router.query.projectId === 'string' ? router.query.projectId : '';
+    typeof router.query.projectId === 'string' ? router.query.projectId : ''
 
-  const [isTaskExpanded, setIsTaskExpanded] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isTaskExpanded, setIsTaskExpanded] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   const projectQuery = trpc.projectById.useQuery(
     { projectId },
-    { enabled: Boolean(projectId), refetchInterval: 2500 },
-  );
+    {
+      enabled: Boolean(projectId),
+      refetchInterval: (query) => {
+        if (
+          query.state.data?.status === 'completed' ||
+          query.state.data?.status === 'failed'
+        ) {
+          return false
+        }
+        return 5000
+      },
+    },
+  )
 
   const deleteMutation = trpc.deleteProject.useMutation({
     onSuccess: () => {
-      router.push('/');
+      router.push('/')
     },
-  });
+  })
 
-  const project = projectQuery.data;
+  const project = projectQuery.data
   // Use the first task (which is the latest one due to ordering in backend)
-  const task = project?.tasks[0];
+  const task = project?.tasks[0]
 
-  const isCompleted = project?.status === 'completed';
-  const showVideo = isCompleted;
+  const isCompleted = project?.status === 'completed'
+  const showVideo = Boolean(project?.mediaPath)
 
   return (
     <>
@@ -106,7 +117,7 @@ export default function ProjectDetailPage() {
                   Loading project...
                 </CardContent>
               </Card>
-            );
+            )
           }
           if (projectQuery.error) {
             return (
@@ -115,7 +126,7 @@ export default function ProjectDetailPage() {
                   Failed to load project: {projectQuery.error.message}
                 </CardContent>
               </Card>
-            );
+            )
           }
           if (project) {
             return (
@@ -158,7 +169,7 @@ export default function ProjectDetailPage() {
                   </Collapsible>
                 )}
               </div>
-            );
+            )
           }
           return (
             <Card>
@@ -166,39 +177,49 @@ export default function ProjectDetailPage() {
                 Project not found.
               </CardContent>
             </Card>
-          );
+          )
         })()}
       </section>
     </>
-  );
+  )
 }
 
 function ActiveTaskViewer({ taskId }: { taskId: string }) {
   const taskQuery = trpc.taskById.useQuery(
     { taskId },
-    { refetchInterval: 2500 },
-  );
+    {
+      refetchInterval: (query) => {
+        if (
+          query.state.data?.status === 'completed' ||
+          query.state.data?.status === 'failed'
+        ) {
+          return false
+        }
+        return 5000
+      },
+    },
+  )
 
   const retryMutation = trpc.retryTask.useMutation({
     onSuccess: () => {
-      return taskQuery.refetch();
+      return taskQuery.refetch()
     },
-  });
+  })
   const cancelMutation = trpc.cancelTask.useMutation({
     onSuccess: () => {
-      return taskQuery.refetch();
+      return taskQuery.refetch()
     },
-  });
+  })
 
   if (!taskQuery.data) {
     return (
       <div className="p-4 text-muted-foreground text-sm">
         Loading task details...
       </div>
-    );
+    )
   }
 
-  const task = taskQuery.data;
+  const task = taskQuery.data
 
   return (
     <div className="space-y-6">
@@ -211,5 +232,5 @@ function ActiveTaskViewer({ taskId }: { taskId: string }) {
       />
       <TaskEventsList events={task.events} />
     </div>
-  );
+  )
 }

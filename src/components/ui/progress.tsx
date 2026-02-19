@@ -1,13 +1,13 @@
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils'
 
 export const Progress = ({
   value,
   className,
 }: {
-  value: number;
-  className?: string;
+  value: number
+  className?: string
 }) => {
-  const width = Math.max(0, Math.min(100, value));
+  const width = Math.max(0, Math.min(100, value))
 
   return (
     <div
@@ -21,5 +21,5 @@ export const Progress = ({
         style={{ width: `${width}%` }}
       />
     </div>
-  );
-};
+  )
+}

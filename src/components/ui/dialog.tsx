@@ -1,30 +1,30 @@
-import { XIcon } from 'lucide-react';
-import { Dialog as DialogPrimitive } from 'radix-ui';
-import type * as React from 'react';
-import { cn } from '@/lib/utils';
+import { XIcon } from 'lucide-react'
+import { Dialog as DialogPrimitive } from 'radix-ui'
+import type * as React from 'react'
+import { cn } from '@/lib/utils'
 
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
 
 function DialogTrigger({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
+  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
 }
 
 function DialogPortal({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
+  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 
 function DialogClose({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Close>) {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
 function DialogOverlay({
@@ -40,7 +40,7 @@ function DialogOverlay({
       data-slot="dialog-overlay"
       {...props}
     />
-  );
+  )
 }
 
 function DialogContent({
@@ -49,7 +49,7 @@ function DialogContent({
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  showCloseButton?: boolean;
+  showCloseButton?: boolean
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -74,7 +74,7 @@ function DialogContent({
         )}
       </DialogPrimitive.Content>
     </DialogPortal>
-  );
+  )
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
@@ -84,7 +84,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
       data-slot="dialog-header"
       {...props}
     />
-  );
+  )
 }
 
 function DialogFooter({
@@ -103,7 +103,7 @@ function DialogFooter({
     >
       {children}
     </div>
-  );
+  )
 }
 
 function DialogTitle({
@@ -116,7 +116,7 @@ function DialogTitle({
       data-slot="dialog-title"
       {...props}
     />
-  );
+  )
 }
 
 function DialogDescription({
@@ -129,7 +129,7 @@ function DialogDescription({
       data-slot="dialog-description"
       {...props}
     />
-  );
+  )
 }
 
 export {
@@ -143,4 +143,4 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
-};
+}

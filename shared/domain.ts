@@ -1,7 +1,7 @@
-import { z } from 'zod';
+import { z } from 'zod'
 
-export const SourceSchema = z.enum(['bilibili', 'tver', 'youtube', 'unknown']);
-export type Source = z.infer<typeof SourceSchema>;
+export const SourceSchema = z.enum(['bilibili', 'tver', 'youtube', 'unknown'])
+export type Source = z.infer<typeof SourceSchema>
 
 export const ProjectStatusSchema = z.enum([
   'queued',
@@ -12,7 +12,7 @@ export const ProjectStatusSchema = z.enum([
   'canceled',
   'completed',
   'failed',
-]);
+])
 
 export const TaskStatusSchema = z.enum([
   'queued',
@@ -21,7 +21,7 @@ export const TaskStatusSchema = z.enum([
   'canceled',
   'completed',
   'failed',
-]);
+])
 
 export const TaskEventLevelSchema = z.enum([
   'trace',
@@ -29,18 +29,18 @@ export const TaskEventLevelSchema = z.enum([
   'info',
   'warn',
   'error',
-]);
+])
 
 export const SubmitProjectInputSchema = z.object({
   sourceOrUrl: z.string().min(2),
   translationHint: z.string().max(400).optional(),
-});
+})
 
 export const TaskProgressSchema = z.object({
   step: z.string().min(1),
   percent: z.number().int().min(0).max(100),
   message: z.string().min(1),
-});
+})
 
 export const CostBreakdownSchema = z.object({
   llmProvider: z.string(),
@@ -48,4 +48,4 @@ export const CostBreakdownSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   totalCostTwd: z.number().nonnegative(),
-});
+})

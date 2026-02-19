@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod'
 
 const EnvSchema = z.object({
   PIPELINE_MODE: z.enum(['mock', 'live']).default('mock'),
@@ -16,7 +16,7 @@ const EnvSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-3.1-pro-preview'),
   SQLITE_DB_PATH: z.string().default('data/grillmaster.db'),
-});
+})
 
 export const env = EnvSchema.parse({
   PIPELINE_MODE: process.env.PIPELINE_MODE,
@@ -32,11 +32,11 @@ export const env = EnvSchema.parse({
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_MODEL: process.env.GEMINI_MODEL,
   SQLITE_DB_PATH: process.env.SQLITE_DB_PATH,
-});
+})
 
 export const ensureLivePipelineEnv = () => {
   if (env.PIPELINE_MODE !== 'live') {
-    return;
+    return
   }
 
   const required: [string, string | undefined][] = [
@@ -46,11 +46,11 @@ export const ensureLivePipelineEnv = () => {
     ['OSS_ACCESS_KEY_ID', env.OSS_ACCESS_KEY_ID],
     ['OSS_ACCESS_KEY_SECRET', env.OSS_ACCESS_KEY_SECRET],
     ['GEMINI_API_KEY', env.GEMINI_API_KEY],
-  ];
+  ]
 
-  const missing = required.filter(([, value]) => !value).map(([key]) => key);
+  const missing = required.filter(([, value]) => !value).map(([key]) => key)
 
   if (missing.length > 0) {
-    throw new Error(`Missing live pipeline env: ${missing.join(', ')}`);
+    throw new Error(`Missing live pipeline env: ${missing.join(', ')}`)
   }
-};
+}

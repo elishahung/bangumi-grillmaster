@@ -1,7 +1,7 @@
-import type { AppRouter } from '@server/trpc/router';
-import { httpBatchLink } from '@trpc/client';
-import { createTRPCNext } from '@trpc/next';
-import superjson from 'superjson';
+import type { AppRouter } from '@server/trpc/router'
+import { httpBatchLink } from '@trpc/client'
+import { createTRPCNext } from '@trpc/next'
+import superjson from 'superjson'
 
 export const trpc = createTRPCNext<AppRouter>({
   transformer: superjson,
@@ -13,7 +13,7 @@ export const trpc = createTRPCNext<AppRouter>({
           transformer: superjson,
         }),
       ],
-    };
+    }
   },
   ssr: false,
-});
+})

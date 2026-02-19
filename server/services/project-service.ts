@@ -1,19 +1,19 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { ConflictError, InfrastructureError } from '@server/core/errors';
-import { repository } from '@server/db/repository';
-import { parseSourceInput } from '@server/services/parse-source';
-import { SubmitProjectInputSchema } from '@shared/domain';
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { ConflictError, InfrastructureError } from '@server/core/errors'
+import { repository } from '@server/db/repository'
+import { parseSourceInput } from '@server/services/parse-source'
+import { SubmitProjectInputSchema } from '@shared/domain'
 import type {
   ProjectDetail,
   ProjectRow,
   TaskDetail,
   TaskRow,
-} from '@shared/view-models';
-import { errAsync, fromPromise, type ResultAsync } from 'neverthrow';
+} from '@shared/view-models'
+import { errAsync, fromPromise, type ResultAsync } from 'neverthrow'
 
-type ServiceError = ConflictError | InfrastructureError;
-const infra = (message: string) => new InfrastructureError(message);
+type ServiceError = ConflictError | InfrastructureError
+const infra = (message: string) => new InfrastructureError(message)
 
 export const makeProjectService = () => ({
   submitProject: (
@@ -22,11 +22,11 @@ export const makeProjectService = () => ({
     { projectId: string; taskId: string; status: 'queued' },
     ServiceError
   > => {
-    const data = SubmitProjectInputSchema.parse(input);
-    const source = parseSourceInput(data.sourceOrUrl);
+    const data = SubmitProjectInputSchema.parse(input)
+    const source = parseSourceInput(data.sourceOrUrl)
 
     if (source.isErr()) {
-      return errAsync(infra(source.error.message));
+      return errAsync(infra(source.error.message))
     }
 
     return fromPromise(
@@ -41,12 +41,12 @@ export const makeProjectService = () => ({
           error instanceof Error &&
           error.message.includes('already exists')
         ) {
-          return new ConflictError(error.message);
+          return new ConflictError(error.message)
         }
 
-        return infra(`submitProject failed: ${String(error)}`);
+        return infra(`submitProject failed: ${String(error)}`)
       },
-    );
+    )
   },
 
   listProjects: (): ResultAsync<ProjectRow[], ServiceError> =>
@@ -89,10 +89,10 @@ export const makeProjectService = () => ({
     ),
 
   upsertWatchProgress: (input: {
-    projectId: string;
-    viewerId: string;
-    positionSec: number;
-    durationSec: number;
+    projectId: string
+    viewerId: string
+    positionSec: number
+    durationSec: number
   }) =>
     fromPromise(repository.upsertWatchProgress(input), (error) =>
       infra(`upsertWatchProgress failed: ${String(error)}`),
@@ -102,30 +102,30 @@ export const makeProjectService = () => ({
     fromPromise(
       (async () => {
         // 1. Get project to confirm existence (and potentially get info for logging)
-        const project = await repository.getProjectById(projectId);
+        const project = await repository.getProjectById(projectId)
         if (!project) {
           // If project doesn't exist in DB, we still might want to try cleaning up folder,
           // but for now let's just return success or error.
           // If it's already gone, "delete" is technically successful or a no-op.
           // Let's treat it as a no-op success to be idempotent, or error if strict.
           // Given the requirement "project can be removed", if it's missing it's removed.
-          return { ok: true as const };
+          return { ok: true as const }
         }
 
         // 2. Rename project folder
-        const projectDir = path.resolve(process.cwd(), 'projects', projectId);
+        const projectDir = path.resolve(process.cwd(), 'projects', projectId)
         try {
-          await fs.access(projectDir);
+          await fs.access(projectDir)
           // Folder exists, rename it
           const deletedDir = path.resolve(
             process.cwd(),
             'projects',
             `_deleted_${projectId}`,
-          );
+          )
           // If _deleted_ folder already exists, we might overwrite or error.
           // Rename will likely fail if target exists and is non-empty or we might want to append ts.
           // For simplicity, let's assume simple rename.
-          await fs.rename(projectDir, deletedDir);
+          await fs.rename(projectDir, deletedDir)
         } catch (e) {
           // If folder doesn't exist, ignore (maybe it was manually deleted)
           // If rename fails, we might want to throw or log.
@@ -133,20 +133,20 @@ export const makeProjectService = () => ({
           if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw new InfrastructureError(
               `Failed to rename project folder: ${String(e)}`,
-            );
+            )
           }
         }
 
         // 3. Delete from DB
-        await repository.deleteProject(projectId);
+        await repository.deleteProject(projectId)
 
-        return { ok: true as const };
+        return { ok: true as const }
       })(),
       (error) => {
         if (error instanceof InfrastructureError) {
-          return error;
+          return error
         }
-        return infra(`deleteProject failed: ${String(error)}`);
+        return infra(`deleteProject failed: ${String(error)}`)
       },
     ),
-});
+})

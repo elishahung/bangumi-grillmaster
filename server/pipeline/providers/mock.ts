@@ -1,16 +1,16 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import fs from 'node:fs/promises'
+import path from 'node:path'
 
 export type TranslationResult = {
-  inputTokens: number;
-  llmModel: string;
-  llmProvider: string;
-  outputTokens: number;
-  totalCostTwd: number;
-};
+  inputTokens: number
+  llmModel: string
+  llmProvider: string
+  outputTokens: number
+  totalCostTwd: number
+}
 
 export const runMockAsr = async (audioPath: string, outputSrt: string) => {
-  const line = path.basename(audioPath, path.extname(audioPath));
+  const line = path.basename(audioPath, path.extname(audioPath))
   const content = [
     '1',
     '00:00:00,000 --> 00:00:03,000',
@@ -20,21 +20,21 @@ export const runMockAsr = async (audioPath: string, outputSrt: string) => {
     '00:00:03,000 --> 00:00:08,000',
     'This is a mock ASR output. Configure real providers in .env.local.',
     '',
-  ].join('\n');
+  ].join('\n')
 
-  await fs.writeFile(outputSrt, content, 'utf8');
-};
+  await fs.writeFile(outputSrt, content, 'utf8')
+}
 
 export const runMockTranslation = async (
   asrSrt: string,
   translatedSrt: string,
 ): Promise<TranslationResult> => {
-  const raw = await fs.readFile(asrSrt, 'utf8');
+  const raw = await fs.readFile(asrSrt, 'utf8')
   const translated = raw.replace(
     'transcription placeholder',
     '轉錄內容（mock）',
-  );
-  await fs.writeFile(translatedSrt, translated, 'utf8');
+  )
+  await fs.writeFile(translatedSrt, translated, 'utf8')
 
   return {
     llmProvider: 'mock',
@@ -42,5 +42,5 @@ export const runMockTranslation = async (
     inputTokens: 0,
     outputTokens: 0,
     totalCostTwd: 0,
-  };
-};
+  }
+}

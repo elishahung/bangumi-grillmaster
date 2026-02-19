@@ -44,4 +44,4 @@ The user provides:
 
 Workflow: Listen to audio -> Cross-reference with program title -> Correct ASR errors -> Translate to Traditional Chinese.
 
-You must output ONLY the localized Traditional Chinese SRT.`;
+You must output ONLY the localized Traditional Chinese SRT.`

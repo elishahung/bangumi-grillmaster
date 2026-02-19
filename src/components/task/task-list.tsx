@@ -1,10 +1,10 @@
-import type { TaskRow } from '@shared/view-models';
-import Link from 'next/link';
-import { toTaskBadgeVariant } from '@/components/task/status';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { formatDate } from '@/lib/format-date';
+import type { TaskRow } from '@shared/view-models'
+import Link from 'next/link'
+import { toTaskBadgeVariant } from '@/components/task/status'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
+import { formatDate } from '@/lib/format-date'
 
 export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
   if (tasks.length === 0) {
@@ -14,7 +14,7 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
           No tasks found.
         </CardContent>
       </Card>
-    );
+    )
   }
 
   return (
@@ -46,5 +46,5 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
         </Link>
       ))}
     </div>
-  );
-};
+  )
+}

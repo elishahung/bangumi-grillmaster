@@ -1,19 +1,20 @@
-import type { ProjectRow } from '@shared/view-models';
-import { PlayCircle } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { toProjectBadgeVariant } from '@/components/project/status';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { formatDate } from '@/lib/format-date';
+import { DEFAULT_VIEWER_ID } from '@shared/constants'
+import type { ProjectRow } from '@shared/view-models'
+import { PlayCircle } from 'lucide-react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { toProjectBadgeVariant } from '@/components/project/status'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
+import { formatDate } from '@/lib/format-date'
 
 export const ProjectGrid = ({
   projects,
   emptyText,
 }: {
-  projects: ProjectRow[];
-  emptyText?: string;
+  projects: ProjectRow[]
+  emptyText?: string
 }) => {
   if (projects.length === 0) {
     return (
@@ -22,14 +23,17 @@ export const ProjectGrid = ({
           {emptyText ?? 'No projects yet.'}
         </CardContent>
       </Card>
-    );
+    )
   }
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {projects.map((project) => {
-        const isCompleted = project.status === 'completed';
-        const task = project.task;
+        const isCompleted = project.status === 'completed'
+        const task = project.task
+        const mineProgress = isCompleted
+          ? project.watchProgress?.find((p) => p.viewerId === DEFAULT_VIEWER_ID)
+          : null
 
         return (
           <Link
@@ -104,10 +108,34 @@ export const ProjectGrid = ({
                   <Progress className="h-1.5" value={task.progressPercent} />
                 </div>
               )}
+
+              {isCompleted && mineProgress && mineProgress.durationSec > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-medium text-muted-foreground">
+                      Watched
+                    </span>
+                    <span className="text-muted-foreground">
+                      {Math.round(
+                        (mineProgress.positionSec / mineProgress.durationSec) *
+                          100,
+                      )}
+                      %
+                    </span>
+                  </div>
+                  <Progress
+                    className="h-1.5"
+                    value={
+                      (mineProgress.positionSec / mineProgress.durationSec) *
+                      100
+                    }
+                  />
+                </div>
+              )}
             </div>
           </Link>
-        );
+        )
       })}
     </div>
-  );
-};
+  )
+}

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import type { ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 
 export const SectionHeading = ({
   title,
@@ -7,10 +7,10 @@ export const SectionHeading = ({
   actions,
   className,
 }: {
-  title: string;
-  description?: string;
-  actions?: ReactNode;
-  className?: string;
+  title: string
+  description?: string
+  actions?: ReactNode
+  className?: string
 }) => (
   <div
     className={cn(
@@ -28,4 +28,4 @@ export const SectionHeading = ({
     </div>
     {actions ? <div>{actions}</div> : null}
   </div>
-);
+)

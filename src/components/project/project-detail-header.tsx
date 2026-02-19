@@ -1,13 +1,13 @@
-import type { ProjectDetail } from '@shared/view-models';
-import Link from 'next/link';
-import { toProjectBadgeVariant } from '@/components/project/status';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { ProjectDetail } from '@shared/view-models'
+import Link from 'next/link'
+import { toProjectBadgeVariant } from '@/components/project/status'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const ProjectDetailHeader = ({
   project,
 }: {
-  project: ProjectDetail;
+  project: ProjectDetail
 }) => (
   <Card>
     <CardHeader>
@@ -38,4 +38,4 @@ export const ProjectDetailHeader = ({
       ) : null}
     </CardContent>
   </Card>
-);
+)
