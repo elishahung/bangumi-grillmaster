@@ -14,7 +14,7 @@ class Settings(BaseSettings):
         description="Model identifier for ASR (Automatic Speech Recognition) processing",
     )
     gemini_model: str = Field(
-        default="gemini-3-pro-preview",
+        default="gemini-3.1-pro-preview",
         description="Model identifier for translation tasks",
     )
     cookies_txt_path: Path | None = Field(

@@ -21,7 +21,7 @@ def calculate_cost(
         "gemini-3-flash-preview": ModelCost(
             input=0.50, cache_hit=0.10, output=3.00
         ),
-        "gemini-3-pro-preview": ModelCost(
+        "gemini-3.1-pro-preview": ModelCost(
             input=2.00, cache_hit=0.20, output=12.00
         ),
     }
