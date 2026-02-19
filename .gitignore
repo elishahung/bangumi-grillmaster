@@ -219,3 +219,8 @@ __marimo__/
 projects/
 cookies.txt
 _test*
+
+# platform
+.next/
+data
+node_modules
