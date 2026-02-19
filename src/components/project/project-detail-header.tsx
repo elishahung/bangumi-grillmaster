@@ -1,8 +1,8 @@
-import type { ProjectDetail } from "@shared/view-models";
-import Link from "next/link";
-import { toProjectBadgeVariant } from "@/components/project/status";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ProjectDetail } from '@shared/view-models';
+import Link from 'next/link';
+import { toProjectBadgeVariant } from '@/components/project/status';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export const ProjectDetailHeader = ({
   project,
@@ -29,7 +29,7 @@ export const ProjectDetailHeader = ({
       </div>
       {project.sourceUrl ? (
         <Link
-          className="text-sm text-blue-700 underline"
+          className="text-blue-700 text-sm underline"
           href={project.sourceUrl}
           target="_blank"
         >

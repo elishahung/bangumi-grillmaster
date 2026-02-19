@@ -1,29 +1,171 @@
-import fs from "node:fs/promises";
-import path from "node:path";
-import { PipelineError } from "@server/core/errors";
-import { retryBackoff, toPipelineError } from "@server/core/retry";
-import { repository } from "@server/db/repository";
-import { ensureLivePipelineEnv, env } from "@server/env";
-import { runCommand } from "@server/pipeline/exec";
-import { runFunAsr } from "@server/pipeline/providers/funAsr";
-import { runGeminiTranslate } from "@server/pipeline/providers/gemini";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { PipelineError } from '@server/core/errors';
+import { createTaskLogger, type TaskLogger } from '@server/core/logger';
+import { retryBackoff, toPipelineError } from '@server/core/retry';
+import { repository } from '@server/db/repository';
+import { ensureLivePipelineEnv, env } from '@server/env';
+import { runCommand } from '@server/pipeline/exec';
+import { runFunAsr } from '@server/pipeline/providers/funAsr';
+import { runGeminiTranslate } from '@server/pipeline/providers/gemini';
 import {
   runMockAsr,
   runMockTranslation,
   type TranslationResult,
-} from "@server/pipeline/providers/mock";
-import { srtToVtt } from "@server/pipeline/subtitle";
-import { errAsync, ResultAsync } from "neverthrow";
+} from '@server/pipeline/providers/mock';
+import { srtToVtt } from '@server/pipeline/subtitle';
+import type { TaskStepStateRow } from '@shared/view-models';
+import { ResultAsync } from 'neverthrow';
 
-interface QueueItem {
+type QueueItem = {
   taskId: string;
   projectId: string;
-}
+};
 
-interface DownloadMeta {
-  title: string;
-  thumbnailUrl?: string;
-}
+type PipelineStepId =
+  | 'fetch_metadata'
+  | 'download_video'
+  | 'extract_audio'
+  | 'run_asr'
+  | 'translate_subtitles'
+  | 'build_vtt'
+  | 'finalize_project';
+
+type StepOutput = Record<string, unknown>;
+
+type StepContext = {
+  item: QueueItem;
+  projectDir: string;
+  sourceUrl: string;
+  videoPath: string;
+  audioPath: string;
+  asrJsonPath: string;
+  asrSrtPath: string;
+  translatedSrtPath: string;
+  translatedVttPath: string;
+  states: Map<PipelineStepId, TaskStepStateRow>;
+};
+
+type StepDefinition = {
+  id: PipelineStepId;
+  message: string;
+  percent: number;
+  projectStatus: string;
+};
+
+const steps: StepDefinition[] = [
+  {
+    id: 'fetch_metadata',
+    message: 'Fetching video metadata',
+    percent: 10,
+    projectStatus: 'downloading',
+  },
+  {
+    id: 'download_video',
+    message: 'Downloading source video',
+    percent: 25,
+    projectStatus: 'downloading',
+  },
+  {
+    id: 'extract_audio',
+    message: 'Extracting audio',
+    percent: 40,
+    projectStatus: 'asr',
+  },
+  {
+    id: 'run_asr',
+    message: 'Running ASR',
+    percent: 55,
+    projectStatus: 'asr',
+  },
+  {
+    id: 'translate_subtitles',
+    message: 'Translating subtitles',
+    percent: 75,
+    projectStatus: 'translating',
+  },
+  {
+    id: 'build_vtt',
+    message: 'Building VTT subtitles',
+    percent: 88,
+    projectStatus: 'translating',
+  },
+  {
+    id: 'finalize_project',
+    message: 'Finalizing project output',
+    percent: 95,
+    projectStatus: 'translating',
+  },
+];
+
+const asStepMap = (rows: TaskStepStateRow[]) => {
+  const map = new Map<PipelineStepId, TaskStepStateRow>();
+  for (const row of rows) {
+    map.set(row.step as PipelineStepId, row);
+  }
+  return map;
+};
+
+const normalizeSourceUrl = (
+  source: string,
+  sourceVideoId: string,
+  originalInput: string,
+) => {
+  if (
+    originalInput.startsWith('http://') ||
+    originalInput.startsWith('https://')
+  ) {
+    return originalInput;
+  }
+
+  if (source === 'bilibili') {
+    return `https://www.bilibili.com/video/${sourceVideoId}`;
+  }
+
+  if (source === 'youtube') {
+    return `https://www.youtube.com/watch?v=${sourceVideoId}`;
+  }
+
+  return originalInput;
+};
+
+const REGEX_LINE_BREAK = /\r?\n/;
+const parseMetadataJson = (stdout: string) => {
+  const lines = stdout
+    .split(REGEX_LINE_BREAK)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!line) {
+      continue;
+    }
+    try {
+      return JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      // ignore
+    }
+  }
+
+  throw new Error('yt-dlp metadata JSON not found in stdout');
+};
+
+const parseStepOutput = <T>(
+  states: Map<PipelineStepId, TaskStepStateRow>,
+  step: PipelineStepId,
+): T | null => {
+  const value = states.get(step)?.outputJson;
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+};
 
 class TaskPipelineRunner {
   private readonly queue: QueueItem[] = [];
@@ -37,7 +179,7 @@ class TaskPipelineRunner {
 
     this.queue.push(item);
     this.queued.add(item.taskId);
-    void this.consume();
+    this.consume();
   }
 
   private async consume() {
@@ -63,385 +205,598 @@ class TaskPipelineRunner {
     this.running = false;
   }
 
-  private updateProgress(
-    item: QueueItem,
-    input: {
-      status: string;
-      projectStatus: string;
-      step: string;
-      percent: number;
-      message: string;
-      errorMessage?: string;
-    },
-  ) {
-    return retryBackoff(
-      () =>
-        ResultAsync.fromPromise(
-          Promise.all([
-            repository.updateProjectFromPipeline({
-              projectId: item.projectId,
-              status: input.projectStatus,
-            }),
-            repository.updateTaskProgress({
-              taskId: item.taskId,
-              status: input.status,
-              step: input.step,
-              percent: input.percent,
-              message: input.message,
-              errorMessage: input.errorMessage,
-            }),
-          ]).then(() => undefined),
-          (error) => toPipelineError("task-progress", error, true),
-        ),
-      { maxRetries: 3, baseDelayMs: 300 },
+  private runOne(item: QueueItem): ResultAsync<void, PipelineError> {
+    return ResultAsync.fromPromise(this.runOneInternal(item), (error) =>
+      error instanceof PipelineError
+        ? error
+        : toPipelineError('pipeline', error, false),
     );
   }
 
-  private runOne(item: QueueItem): ResultAsync<void, PipelineError> {
-    if (env.PIPELINE_MODE === "live") {
+  private async runOneInternal(item: QueueItem) {
+    if (env.PIPELINE_MODE === 'live') {
       try {
         ensureLivePipelineEnv();
       } catch (error) {
-        return errAsync(toPipelineError("env", error, false));
+        throw toPipelineError('env', error, false);
       }
     }
 
-    return retryBackoff(
-      () =>
-        ResultAsync.fromPromise(
-          repository.getProjectRuntime(item.projectId),
-          (error) => toPipelineError("project-read", error, true),
-        ),
-      { maxRetries: 3, baseDelayMs: 400 },
-    ).andThen((project) => {
-      if (!project) {
-        return errAsync(
-          new PipelineError("project", "Project not found for task", false),
-        );
+    const taskRuntime = await repository.getTaskRuntime(item.taskId);
+    if (!taskRuntime) {
+      throw new PipelineError('task', 'Task not found', false);
+    }
+
+    if (taskRuntime.status === 'canceled') {
+      return;
+    }
+
+    const project = await repository.getProjectRuntime(item.projectId);
+    if (!project) {
+      throw new PipelineError('project', 'Project not found for task', false);
+    }
+
+    const projectDir = path.resolve(process.cwd(), 'projects', item.projectId);
+    const videoPath = path.join(projectDir, 'video.mp4');
+    const audioPath = path.join(projectDir, 'audio.opus');
+    const asrJsonPath = path.join(projectDir, 'asr.json');
+    const asrSrtPath = path.join(projectDir, 'asr.srt');
+    const translatedSrtPath = path.join(projectDir, 'video.srt');
+    const translatedVttPath = path.join(projectDir, 'video.vtt');
+    const sourceUrl = normalizeSourceUrl(
+      project.source,
+      project.sourceVideoId,
+      project.originalInput,
+    );
+
+    await fs.mkdir(projectDir, { recursive: true });
+
+    const states = asStepMap(await repository.getTaskStepStates(item.taskId));
+    const context: StepContext = {
+      item,
+      projectDir,
+      sourceUrl,
+      videoPath,
+      audioPath,
+      asrJsonPath,
+      asrSrtPath,
+      translatedSrtPath,
+      translatedVttPath,
+      states,
+    };
+
+    for (const step of steps) {
+      if (await repository.isTaskCancelRequested(item.taskId)) {
+        await repository.markTaskCanceled({
+          taskId: item.taskId,
+          reason: 'Task canceled by user',
+          step: step.id,
+          percent: step.percent,
+        });
+        return;
       }
 
-      const projectDir = path.resolve(
-        process.cwd(),
-        "projects",
-        item.projectId,
-      );
-      const videoPath = path.join(projectDir, "video.mp4");
-      const audioPath = path.join(projectDir, "audio.opus");
-      const asrJsonPath = path.join(projectDir, "asr.json");
-      const asrSrtPath = path.join(projectDir, "asr.srt");
-      const translatedSrtPath = path.join(projectDir, "video.srt");
-      const translatedVttPath = path.join(projectDir, "video.vtt");
-      const sourceUrl = this.normalizeSourceUrl(
-        project.source,
-        project.sourceVideoId,
-        project.originalInput,
-      );
+      const checkpoint = context.states.get(step.id);
+      if (checkpoint?.status === 'completed') {
+        const logger = createTaskLogger({
+          taskId: item.taskId,
+          projectId: item.projectId,
+          step: step.id,
+          percent: step.percent,
+        });
+        await logger.debug('Step skipped because checkpoint is completed');
+        continue;
+      }
 
-      return this.updateProgress(item, {
-        status: "running",
-        projectStatus: "downloading",
-        step: "download",
-        percent: 10,
-        message: "Downloading source video",
-      })
-        .andThen(() =>
-          ResultAsync.fromPromise(
-            fs.mkdir(projectDir, { recursive: true }),
-            (error) => toPipelineError("mkdir", error, false),
-          ),
-        )
-        .andThen(() =>
-          this.downloadAndPrepareVideo(
-            sourceUrl,
-            projectDir,
-            item.projectId,
-            videoPath,
-          ),
-        )
-        .andThen((downloadMeta) =>
-          this.updateProgress(item, {
-            status: "running",
-            projectStatus: "asr",
-            step: "audio",
-            percent: 35,
-            message: "Extracting audio",
-          }).andThen(() =>
-            retryBackoff(
-              () =>
-                ResultAsync.fromPromise(
-                  runCommand(env.FFMPEG_BIN, [
-                    "-y",
-                    "-i",
-                    videoPath,
-                    "-ac",
-                    "1",
-                    "-ar",
-                    "16000",
-                    "-b:a",
-                    "24k",
-                    audioPath,
-                  ]),
-                  (error) => toPipelineError("audio", error, true),
-                ),
-              { maxRetries: 2, baseDelayMs: 800 },
-            ).map(() => downloadMeta),
-          ),
-        )
-        .andThen((downloadMeta) =>
-          this.updateProgress(item, {
-            status: "running",
-            projectStatus: "asr",
-            step: "asr",
-            percent: 55,
-            message: "Running ASR",
-          }).andThen(() =>
-            this.runAsr(item.projectId, audioPath, asrSrtPath, asrJsonPath).map(
-              () => downloadMeta,
-            ),
-          ),
-        )
-        .andThen((downloadMeta) =>
-          this.updateProgress(item, {
-            status: "running",
-            projectStatus: "translating",
-            step: "translate",
-            percent: 75,
-            message: "Translating subtitles",
-          }).andThen(() =>
-            this.runTranslation(
-              item.projectId,
-              asrSrtPath,
-              audioPath,
-              translatedSrtPath,
-              project.translationHint ?? "",
-            ).map((translation) => ({ downloadMeta, translation })),
-          ),
-        )
-        .andThen(({ downloadMeta, translation }) =>
-          ResultAsync.fromPromise(
-            fs
-              .readFile(translatedSrtPath, "utf8")
-              .then((srt) =>
-                fs.writeFile(translatedVttPath, srtToVtt(srt), "utf8"),
-              ),
-            (error) => toPipelineError("vtt", error, false),
-          ).map(() => ({ downloadMeta, translation })),
-        )
-        .andThen(({ downloadMeta, translation }) =>
-          retryBackoff(
-            () =>
-              ResultAsync.fromPromise(
-                repository.updateProjectFromPipeline({
-                  projectId: item.projectId,
-                  status: "completed",
-                  title: downloadMeta.title,
-                  thumbnailUrl: downloadMeta.thumbnailUrl,
-                  sourceUrl,
-                  mediaPath: `${item.projectId}/video.mp4`,
-                  subtitlePath: `${item.projectId}/video.vtt`,
-                  llmCostTwd: translation.totalCostTwd,
-                  llmProvider: translation.llmProvider,
-                  llmModel: translation.llmModel,
-                  inputTokens: translation.inputTokens,
-                  outputTokens: translation.outputTokens,
-                }),
-                (error) => toPipelineError("project-finalize", error, true),
-              ),
-            { maxRetries: 3, baseDelayMs: 400 },
-          ),
-        )
-        .andThen(() =>
-          this.updateProgress(item, {
-            status: "completed",
-            projectStatus: "completed",
-            step: "done",
-            percent: 100,
-            message: "Pipeline completed",
-          }),
-        )
-        .map(() => undefined)
-        .orElse((error) =>
-          this.updateProgress(item, {
-            status: "failed",
-            projectStatus: "failed",
-            step: "failed",
-            percent: 100,
-            message: "Pipeline failed",
-            errorMessage: error.message,
-          }).andThen(() => errAsync(error)),
+      await repository.updateProjectFromPipeline({
+        projectId: item.projectId,
+        status: step.projectStatus,
+        sourceUrl,
+      });
+
+      await repository.updateTaskProgress({
+        taskId: item.taskId,
+        status: 'running',
+        step: step.id,
+        percent: step.percent,
+        message: step.message,
+        eventType: 'system',
+        level: 'info',
+      });
+
+      await repository.markStepStart({
+        taskId: item.taskId,
+        projectId: item.projectId,
+        step: step.id,
+      });
+
+      await repository.appendTaskEvent({
+        taskId: item.taskId,
+        projectId: item.projectId,
+        step: step.id,
+        eventType: 'step_start',
+        level: 'info',
+        message: `Step started: ${step.id}`,
+        percent: step.percent,
+      });
+
+      const logger = createTaskLogger({
+        taskId: item.taskId,
+        projectId: item.projectId,
+        step: step.id,
+        percent: step.percent,
+      });
+
+      try {
+        let output: StepOutput | undefined;
+
+        if (step.id === 'fetch_metadata') {
+          output = await this.fetchMetadata(context, logger);
+        } else if (step.id === 'download_video') {
+          output = await this.downloadVideo(context, logger);
+        } else if (step.id === 'extract_audio') {
+          output = await this.extractAudio(context, logger);
+        } else if (step.id === 'run_asr') {
+          output = await this.runAsr(context, logger);
+        } else if (step.id === 'translate_subtitles') {
+          output = await this.runTranslation(context, logger);
+        } else if (step.id === 'build_vtt') {
+          output = await this.buildVtt(context, logger);
+        } else if (step.id === 'finalize_project') {
+          output = await this.finalizeProject(context, logger);
+        }
+
+        const ended = await repository.markStepEnd({
+          taskId: item.taskId,
+          projectId: item.projectId,
+          step: step.id,
+          status: 'completed',
+          outputJson: output ? JSON.stringify(output) : undefined,
+        });
+
+        await repository.appendTaskEvent({
+          taskId: item.taskId,
+          projectId: item.projectId,
+          step: step.id,
+          eventType: 'step_end',
+          level: 'info',
+          message: `Step completed: ${step.id}`,
+          percent: step.percent,
+          durationMs: ended.durationMs,
+        });
+
+        context.states = asStepMap(
+          await repository.getTaskStepStates(item.taskId),
         );
+
+        if (await repository.isTaskCancelRequested(item.taskId)) {
+          await repository.markTaskCanceled({
+            taskId: item.taskId,
+            reason: 'Task canceled by user',
+            step: step.id,
+            percent: step.percent,
+          });
+          return;
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Pipeline step failed';
+
+        const ended = await repository.markStepEnd({
+          taskId: item.taskId,
+          projectId: item.projectId,
+          step: step.id,
+          status: 'failed',
+          errorMessage: message,
+        });
+
+        await repository.updateProjectFromPipeline({
+          projectId: item.projectId,
+          status: 'failed',
+        });
+
+        await repository.updateTaskProgress({
+          taskId: item.taskId,
+          status: 'failed',
+          step: step.id,
+          percent: step.percent,
+          message: `Pipeline failed at step: ${step.id}`,
+          errorMessage: message,
+          eventType: 'error',
+          level: 'error',
+          durationMs: ended.durationMs,
+        });
+
+        await logger.error(`Step failed: ${message}`, message);
+        throw error instanceof PipelineError
+          ? error
+          : toPipelineError(step.id, error, false);
+      }
+    }
+
+    await repository.updateProjectFromPipeline({
+      projectId: item.projectId,
+      status: 'completed',
+    });
+
+    await repository.updateTaskProgress({
+      taskId: item.taskId,
+      status: 'completed',
+      step: 'done',
+      percent: 100,
+      message: 'Pipeline completed',
+      eventType: 'system',
+      level: 'info',
     });
   }
 
-  private normalizeSourceUrl(
-    source: string,
-    sourceVideoId: string,
-    originalInput: string,
-  ) {
-    if (
-      originalInput.startsWith("http://") ||
-      originalInput.startsWith("https://")
-    ) {
-      return originalInput;
-    }
+  private async fetchMetadata(context: StepContext, logger: TaskLogger) {
+    await logger.info('Fetching metadata via yt-dlp --dump-single-json');
 
-    if (source === "bilibili") {
-      return `https://www.bilibili.com/video/${sourceVideoId}`;
-    }
-
-    if (source === "youtube") {
-      return `https://www.youtube.com/watch?v=${sourceVideoId}`;
-    }
-
-    return originalInput;
-  }
-
-  private downloadAndPrepareVideo(
-    sourceUrl: string,
-    projectDir: string,
-    projectId: string,
-    outputVideo: string,
-  ): ResultAsync<DownloadMeta, PipelineError> {
-    return retryBackoff(
+    const result = await retryBackoff(
       () =>
         ResultAsync.fromPromise(
-          runCommand(env.YT_DLP_BIN, [
-            "--write-thumbnail",
-            "--write-info-json",
-            "--convert-thumbnails",
-            "jpg",
-            "--merge-output-format",
-            "mp4",
-            "-f",
-            "bestvideo+bestaudio/best",
-            "-o",
-            path.join(projectDir, "%(playlist_index|0)s.%(ext)s"),
-            sourceUrl,
-          ]),
-          (error) => toPipelineError("download", error, true),
+          runCommand(
+            env.YT_DLP_BIN,
+            ['--dump-single-json', '--skip-download', context.sourceUrl],
+            context.projectDir,
+            {
+              onStdoutLine: (line) => {
+                logger.trace(`[yt-dlp:stdout] ${line}`);
+              },
+              onStderrLine: (line) => {
+                logger.debug(`[yt-dlp:stderr] ${line}`);
+              },
+            },
+          ),
+          (error) => toPipelineError('fetch_metadata', error, true),
+        ),
+      { maxRetries: 2, baseDelayMs: 500 },
+    ).match(
+      (value) => value,
+      (error) => {
+        throw error;
+      },
+    );
+
+    const metadata = parseMetadataJson(result.stdout);
+    const title =
+      typeof metadata.title === 'string'
+        ? metadata.title
+        : path.basename(context.videoPath, '.mp4');
+    const thumbnailUrl =
+      typeof metadata.thumbnail === 'string' ? metadata.thumbnail : undefined;
+
+    await fs.writeFile(
+      path.join(context.projectDir, 'metadata.info.json'),
+      JSON.stringify(metadata, null, 2),
+      'utf8',
+    );
+
+    await repository.updateProjectFromPipeline({
+      projectId: context.item.projectId,
+      status: 'downloading',
+      sourceUrl: context.sourceUrl,
+      title,
+      thumbnailUrl,
+    });
+
+    await logger.info('Metadata fetched and project updated');
+
+    return {
+      title,
+      thumbnailUrl,
+      sourceUrl: context.sourceUrl,
+    };
+  }
+
+  private async downloadVideo(context: StepContext, logger: TaskLogger) {
+    await logger.info('Downloading video and preparing merged mp4 output');
+
+    const defaultOut = path.join(
+      context.projectDir,
+      '%(playlist_index|0)s.%(ext)s',
+    );
+    const infoJsonOut = path.join(context.projectDir, 'metadata');
+    const thumbnailOut = path.join(context.projectDir, 'poster');
+
+    await retryBackoff(
+      () =>
+        ResultAsync.fromPromise(
+          runCommand(
+            env.YT_DLP_BIN,
+            [
+              '--write-thumbnail',
+              '--write-info-json',
+              '-o',
+              `${defaultOut}`,
+              '-o',
+              `infojson:${infoJsonOut}`,
+              '-o',
+              `thumbnail:${thumbnailOut}`,
+              '--merge-output-format',
+              'mp4',
+              '-f',
+              'bestvideo+bestaudio/best',
+              '--convert-thumbnails',
+              'jpg',
+              '--embed-thumbnail',
+              '--embed-metadata',
+              '--embed-chapters',
+              context.sourceUrl,
+            ],
+            context.projectDir,
+            {
+              onStdoutLine: (line) => {
+                logger.trace(`[yt-dlp:stdout] ${line}`);
+              },
+              onStderrLine: (line) => {
+                logger.debug(`[yt-dlp:stderr] ${line}`);
+              },
+            },
+          ),
+          (error) => toPipelineError('download_video', error, true),
         ),
       { maxRetries: 2, baseDelayMs: 1000 },
-    ).andThen(() =>
-      ResultAsync.fromPromise(
-        (async () => {
-          const entries = await fs.readdir(projectDir);
-          const videos = entries
-            .filter((name) => name.endsWith(".mp4"))
-            .sort()
-            .map((name) => path.join(projectDir, name));
-
-          if (videos.length === 0) {
-            throw new Error("yt-dlp produced no mp4 files");
-          }
-
-          if (videos.length === 1) {
-            const first = videos[0];
-            if (!first) {
-              throw new Error("Missing downloaded video file");
-            }
-            if (first !== outputVideo) {
-              await fs.rename(first, outputVideo);
-            }
-          } else {
-            const concatFile = path.join(projectDir, "concat.txt");
-            await fs.writeFile(
-              concatFile,
-              videos
-                .map((file) => `file '${file.replaceAll("'", "''")}'`)
-                .join("\n"),
-              "utf8",
-            );
-
-            await runCommand(env.FFMPEG_BIN, [
-              "-y",
-              "-f",
-              "concat",
-              "-safe",
-              "0",
-              "-i",
-              concatFile,
-              "-c",
-              "copy",
-              "-movflags",
-              "faststart",
-              outputVideo,
-            ]);
-
-            await Promise.all(
-              videos.map((file) => fs.rm(file, { force: true })),
-            );
-            await fs.rm(concatFile, { force: true });
-          }
-
-          let title = path.basename(outputVideo, ".mp4");
-          try {
-            const metadataRaw = await fs.readFile(
-              path.join(projectDir, "metadata.info.json"),
-              "utf8",
-            );
-            const metadata = JSON.parse(metadataRaw) as { title?: string };
-            title = metadata.title ?? title;
-          } catch {
-            title = path.basename(outputVideo, ".mp4");
-          }
-
-          const posterName = (await fs.readdir(projectDir)).find((name) =>
-            name.startsWith("poster."),
-          );
-
-          return {
-            title,
-            thumbnailUrl: posterName
-              ? `/api/projects/${projectId}/${posterName}`
-              : undefined,
-          };
-        })(),
-        (error) => toPipelineError("download-post", error, false),
-      ),
+    ).match(
+      () => undefined,
+      (error) => {
+        throw error;
+      },
     );
-  }
 
-  private runAsr(
-    projectId: string,
-    audioPath: string,
-    outputSrt: string,
-    outputJson: string,
-  ): ResultAsync<void, PipelineError> {
-    if (env.PIPELINE_MODE === "live") {
-      return runFunAsr({
-        projectId,
-        audioPath,
-        outputJsonPath: outputJson,
-        outputSrtPath: outputSrt,
+    const entries = await fs.readdir(context.projectDir);
+    const videos = entries
+      .filter((name) => name.endsWith('.mp4'))
+      .sort()
+      .map((name) => path.join(context.projectDir, name));
+
+    if (videos.length === 0) {
+      throw new PipelineError(
+        'download_video',
+        'yt-dlp produced no mp4 files',
+        false,
+      );
+    }
+
+    if (videos.length === 1) {
+      const first = videos[0];
+      if (!first) {
+        throw new PipelineError(
+          'download_video',
+          'Downloaded mp4 missing',
+          false,
+        );
+      }
+      if (first !== context.videoPath) {
+        await fs.rename(first, context.videoPath);
+      }
+    } else {
+      const concatFile = path.join(context.projectDir, 'concat.txt');
+      await fs.writeFile(
+        concatFile,
+        videos.map((file) => `file '${file.replaceAll("'", "''")}'`).join('\n'),
+        'utf8',
+      );
+
+      await runCommand(
+        env.FFMPEG_BIN,
+        [
+          '-y',
+          '-f',
+          'concat',
+          '-safe',
+          '0',
+          '-i',
+          concatFile,
+          '-c',
+          'copy',
+          '-movflags',
+          'faststart',
+          context.videoPath,
+        ],
+        context.projectDir,
+        {
+          onStderrLine: (line) => {
+            logger.debug(`[ffmpeg:stderr] ${line}`);
+          },
+        },
+      );
+
+      await Promise.all(videos.map((file) => fs.rm(file, { force: true })));
+      await fs.rm(concatFile, { force: true });
+    }
+
+    const posterName = (await fs.readdir(context.projectDir)).find((name) =>
+      name.startsWith('poster.'),
+    );
+
+    const localThumb = posterName
+      ? `/api/projects/${context.item.projectId}/${posterName}`
+      : undefined;
+
+    if (localThumb) {
+      await repository.updateProjectFromPipeline({
+        projectId: context.item.projectId,
+        status: 'downloading',
+        thumbnailUrl: localThumb,
       });
     }
 
-    return ResultAsync.fromPromise(runMockAsr(audioPath, outputSrt), (error) =>
-      toPipelineError("asr", error, false),
-    );
+    await logger.info('Video download step completed');
+
+    return {
+      mediaPath: `${context.item.projectId}/video.mp4`,
+      thumbnailUrl: localThumb,
+    };
   }
 
-  private runTranslation(
-    projectId: string,
-    inputSrt: string,
-    audioPath: string,
-    outputSrt: string,
-    hint: string,
-  ): ResultAsync<TranslationResult, PipelineError> {
-    if (env.PIPELINE_MODE === "live") {
-      return runGeminiTranslate({
-        projectId,
-        asrSrtPath: inputSrt,
-        audioPath,
-        outputSrtPath: outputSrt,
-        translationHint: hint,
-      });
+  private async extractAudio(context: StepContext, logger: TaskLogger) {
+    await logger.info('Extracting mono 16k opus audio');
+
+    await retryBackoff(
+      () =>
+        ResultAsync.fromPromise(
+          runCommand(
+            env.FFMPEG_BIN,
+            [
+              '-y',
+              '-i',
+              context.videoPath,
+              '-ac',
+              '1',
+              '-ar',
+              '16000',
+              '-b:a',
+              '24k',
+              context.audioPath,
+            ],
+            context.projectDir,
+            {
+              onStderrLine: (line) => {
+                logger.debug(`[ffmpeg:stderr] ${line}`);
+              },
+            },
+          ),
+          (error) => toPipelineError('extract_audio', error, true),
+        ),
+      { maxRetries: 2, baseDelayMs: 800 },
+    ).match(
+      () => undefined,
+      (error) => {
+        throw error;
+      },
+    );
+
+    await logger.info('Audio extracted successfully');
+
+    return {
+      audioPath: context.audioPath,
+    };
+  }
+
+  private async runAsr(context: StepContext, logger: TaskLogger) {
+    await logger.info('Starting ASR provider');
+
+    if (env.PIPELINE_MODE === 'live') {
+      await runFunAsr({
+        projectId: context.item.projectId,
+        audioPath: context.audioPath,
+        outputJsonPath: context.asrJsonPath,
+        outputSrtPath: context.asrSrtPath,
+        logger,
+      }).match(
+        () => undefined,
+        (error) => {
+          throw error;
+        },
+      );
+    } else {
+      await runMockAsr(context.audioPath, context.asrSrtPath);
     }
 
-    return ResultAsync.fromPromise(
-      runMockTranslation(inputSrt, outputSrt),
-      (error) => toPipelineError("translate", error, false),
-    );
+    await logger.info('ASR step completed');
+
+    return {
+      asrJsonPath: context.asrJsonPath,
+      asrSrtPath: context.asrSrtPath,
+    };
+  }
+
+  private async runTranslation(context: StepContext, logger: TaskLogger) {
+    await logger.info('Starting subtitle translation');
+
+    let translation: TranslationResult;
+
+    if (env.PIPELINE_MODE === 'live') {
+      translation = await runGeminiTranslate({
+        projectId: context.item.projectId,
+        asrSrtPath: context.asrSrtPath,
+        audioPath: context.audioPath,
+        outputSrtPath: context.translatedSrtPath,
+        translationHint:
+          (await repository.getProjectRuntime(context.item.projectId))
+            ?.translationHint ?? '',
+        logger,
+      }).match(
+        (value) => value,
+        (error) => {
+          throw error;
+        },
+      );
+    } else {
+      translation = await runMockTranslation(
+        context.asrSrtPath,
+        context.translatedSrtPath,
+      );
+    }
+
+    await repository.updateProjectFromPipeline({
+      projectId: context.item.projectId,
+      status: 'translating',
+      llmCostTwd: translation.totalCostTwd,
+      llmProvider: translation.llmProvider,
+      llmModel: translation.llmModel,
+      inputTokens: translation.inputTokens,
+      outputTokens: translation.outputTokens,
+    });
+
+    await logger.info('Translation step completed');
+
+    return {
+      translation,
+    };
+  }
+
+  private async buildVtt(context: StepContext, logger: TaskLogger) {
+    const srt = await fs.readFile(context.translatedSrtPath, 'utf8');
+    await fs.writeFile(context.translatedVttPath, srtToVtt(srt), 'utf8');
+    await logger.info('VTT subtitle built');
+
+    return {
+      subtitlePath: `${context.item.projectId}/video.vtt`,
+    };
+  }
+
+  private async finalizeProject(context: StepContext, logger: TaskLogger) {
+    const metadataOutput = parseStepOutput<{
+      title?: string;
+      thumbnailUrl?: string;
+      sourceUrl?: string;
+    }>(context.states, 'fetch_metadata');
+    const downloadOutput = parseStepOutput<{
+      thumbnailUrl?: string;
+      mediaPath?: string;
+    }>(context.states, 'download_video');
+    const translationOutput = parseStepOutput<{
+      translation?: TranslationResult;
+    }>(context.states, 'translate_subtitles');
+
+    const translation = translationOutput?.translation;
+
+    await repository.updateProjectFromPipeline({
+      projectId: context.item.projectId,
+      status: 'completed',
+      title: metadataOutput?.title,
+      sourceUrl: metadataOutput?.sourceUrl ?? context.sourceUrl,
+      thumbnailUrl:
+        downloadOutput?.thumbnailUrl ?? metadataOutput?.thumbnailUrl,
+      mediaPath:
+        downloadOutput?.mediaPath ?? `${context.item.projectId}/video.mp4`,
+      subtitlePath: `${context.item.projectId}/video.vtt`,
+      llmCostTwd: translation?.totalCostTwd,
+      llmProvider: translation?.llmProvider,
+      llmModel: translation?.llmModel,
+      inputTokens: translation?.inputTokens,
+      outputTokens: translation?.outputTokens,
+    });
+
+    await logger.info('Project finalized');
+
+    return {
+      mediaPath: `${context.item.projectId}/video.mp4`,
+      subtitlePath: `${context.item.projectId}/video.vtt`,
+    };
   }
 }
 

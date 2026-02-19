@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 
 export const SectionHeading = ({
   title,
@@ -14,12 +14,12 @@ export const SectionHeading = ({
 }) => (
   <div
     className={cn(
-      "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between",
+      'flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between',
       className,
     )}
   >
     <div className="space-y-1">
-      <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
+      <h2 className="font-semibold text-xl tracking-tight sm:text-2xl">
         {title}
       </h2>
       {description ? (

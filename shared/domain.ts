@@ -1,22 +1,34 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-export const SourceSchema = z.enum(["bilibili", "tver", "youtube", "unknown"]);
+export const SourceSchema = z.enum(['bilibili', 'tver', 'youtube', 'unknown']);
 export type Source = z.infer<typeof SourceSchema>;
 
 export const ProjectStatusSchema = z.enum([
-  "queued",
-  "downloading",
-  "asr",
-  "translating",
-  "completed",
-  "failed",
+  'queued',
+  'downloading',
+  'asr',
+  'translating',
+  'canceling',
+  'canceled',
+  'completed',
+  'failed',
 ]);
 
 export const TaskStatusSchema = z.enum([
-  "queued",
-  "running",
-  "completed",
-  "failed",
+  'queued',
+  'running',
+  'canceling',
+  'canceled',
+  'completed',
+  'failed',
+]);
+
+export const TaskEventLevelSchema = z.enum([
+  'trace',
+  'debug',
+  'info',
+  'warn',
+  'error',
 ]);
 
 export const SubmitProjectInputSchema = z.object({

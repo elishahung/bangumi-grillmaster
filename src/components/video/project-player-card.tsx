@@ -1,18 +1,18 @@
-import type { ProjectDetail } from "@shared/view-models";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { trpc } from "@/lib/trpc";
+import type { ProjectDetail } from '@shared/view-models';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { trpc } from '@/lib/trpc';
 
 const EMPTY_VTT_TRACK =
-  "data:text/vtt;charset=utf-8,WEBVTT%0A%0A00:00:00.000%20--%3E%2000:00:00.500%0A";
+  'data:text/vtt;charset=utf-8,WEBVTT%0A%0A00:00:00.000%20--%3E%2000:00:00.500%0A';
 
 export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
-  const [viewerId, setViewerId] = useState<string>("");
+  const [viewerId, setViewerId] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const upsertMutation = trpc.upsertWatchProgress.useMutation();
 
   useEffect(() => {
-    const key = "bgm_viewer_id";
+    const key = 'bgm_viewer_id';
     const existing = window.localStorage.getItem(key);
     if (existing) {
       setViewerId(existing);
@@ -35,7 +35,7 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !mineProgress || mineProgress.positionSec < 3) {
+    if (!(video && mineProgress) || mineProgress.positionSec < 3) {
       return;
     }
     video.currentTime = mineProgress.positionSec;
@@ -43,14 +43,13 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (!viewerId || !videoRef.current) {
+      if (!(viewerId && videoRef.current)) {
         return;
       }
 
       const { currentTime, duration } = videoRef.current;
       if (
-        !Number.isFinite(currentTime) ||
-        !Number.isFinite(duration) ||
+        !(Number.isFinite(currentTime) && Number.isFinite(duration)) ||
         duration <= 0
       ) {
         return;
@@ -90,15 +89,15 @@ export const ProjectPlayerCard = ({ project }: { project: ProjectDetail }) => {
             kind="captions"
             label={
               project.subtitlePath
-                ? "Traditional Chinese"
-                : "Captions unavailable"
+                ? 'Traditional Chinese'
+                : 'Captions unavailable'
             }
             src={
               project.subtitlePath
                 ? `/api/projects/${project.subtitlePath}`
                 : EMPTY_VTT_TRACK
             }
-            srcLang={project.subtitlePath ? "zh-TW" : "en"}
+            srcLang={project.subtitlePath ? 'zh-TW' : 'en'}
           />
         </video>
         <p className="mt-2 text-xs text-zinc-500">

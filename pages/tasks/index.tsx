@@ -1,8 +1,8 @@
-import Head from "next/head";
-import { SectionHeading } from "@/components/layout/section-heading";
-import { TaskList } from "@/components/task/task-list";
-import { Card, CardContent } from "@/components/ui/card";
-import { trpc } from "@/lib/trpc";
+import Head from 'next/head';
+import { SectionHeading } from '@/components/layout/section-heading';
+import { TaskList } from '@/components/task/task-list';
+import { Card, CardContent } from '@/components/ui/card';
+import { trpc } from '@/lib/trpc';
 
 export default function TasksPage() {
   const tasksQuery = trpc.listTasks.useQuery(
@@ -10,6 +10,27 @@ export default function TasksPage() {
     { refetchInterval: 2500 },
   );
   const tasks = tasksQuery.data;
+  let content = <></>;
+
+  if (tasksQuery.isLoading) {
+    content = (
+      <Card>
+        <CardContent className="p-6 text-sm text-zinc-600">
+          Loading tasks...
+        </CardContent>
+      </Card>
+    );
+  } else if (tasksQuery.error) {
+    content = (
+      <Card>
+        <CardContent className="p-6 text-rose-700 text-sm">
+          Failed to load tasks: {tasksQuery.error.message}
+        </CardContent>
+      </Card>
+    );
+  } else {
+    content = <TaskList tasks={tasks ?? []} />;
+  }
 
   return (
     <>
@@ -21,21 +42,7 @@ export default function TasksPage() {
           description="包含目前進行中與歷史任務。"
           title="Task History"
         />
-        {tasksQuery.isLoading ? (
-          <Card>
-            <CardContent className="p-6 text-sm text-zinc-600">
-              Loading tasks...
-            </CardContent>
-          </Card>
-        ) : tasksQuery.error ? (
-          <Card>
-            <CardContent className="p-6 text-sm text-rose-700">
-              Failed to load tasks: {tasksQuery.error.message}
-            </CardContent>
-          </Card>
-        ) : (
-          <TaskList tasks={tasks ?? []} />
-        )}
+        {content}
       </section>
     </>
   );

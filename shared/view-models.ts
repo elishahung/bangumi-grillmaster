@@ -1,57 +1,80 @@
 export interface ProjectRow {
   _id: string;
+  createdAt: number;
+  inputTokens?: number;
+  llmCostTwd: number;
+  llmModel?: string;
+  llmProvider?: string;
+  mediaPath?: string;
+  originalInput: string;
+  outputTokens?: number;
   projectId: string;
   source: string;
-  sourceVideoId: string;
-  originalInput: string;
-  translationHint?: string;
-  status: string;
-  title?: string;
-  thumbnailUrl?: string;
   sourceUrl?: string;
-  mediaPath?: string;
+  sourceVideoId: string;
+  status: string;
   subtitlePath?: string;
-  llmCostTwd: number;
-  llmProvider?: string;
-  llmModel?: string;
-  inputTokens?: number;
-  outputTokens?: number;
-  createdAt: number;
+  thumbnailUrl?: string;
+  title?: string;
+  translationHint?: string;
   updatedAt: number;
 }
 
 export interface TaskRow {
   _id: string;
-  taskId: string;
-  projectId: string;
-  type: string;
-  status: string;
-  currentStep: string;
-  progressPercent: number;
-  message: string;
+  canceledAt?: number;
+  cancelRequestedAt?: number;
   createdAt: number;
-  updatedAt: number;
-  startedAt?: number;
-  finishedAt?: number;
+  currentStep: string;
   errorMessage?: string;
+  finishedAt?: number;
+  message: string;
+  progressPercent: number;
+  projectId: string;
+  startedAt?: number;
+  status: string;
+  taskId: string;
+  type: string;
+  updatedAt: number;
 }
 
 export interface TaskEventRow {
   _id: string;
-  taskId: string;
-  projectId: string;
+  createdAt: number;
+  durationMs?: number;
+  errorMessage?: string;
+  eventType: 'step_start' | 'step_end' | 'log' | 'error' | 'system';
+  level: 'trace' | 'debug' | 'info' | 'warn' | 'error';
   message: string;
   percent: number;
+  projectId: string;
+  step: string;
+  taskId: string;
+}
+
+export interface TaskStepStateRow {
+  _id: string;
+  attempt: number;
   createdAt: number;
+  durationMs?: number;
+  errorMessage?: string;
+  finishedAt?: number;
+  outputJson?: string;
+  projectId: string;
+  startedAt?: number;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'canceled';
+  step: string;
+  taskId: string;
+  updatedAt: number;
 }
 
 export interface WatchProgressRow {
   _id: string;
-  projectId: string;
-  viewerId: string;
-  positionSec: number;
   durationSec: number;
+  positionSec: number;
+  projectId: string;
   updatedAt: number;
+  viewerId: string;
 }
 
 export interface ProjectDetail extends ProjectRow {

@@ -1,21 +1,21 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 const EnvSchema = z.object({
-  PIPELINE_MODE: z.enum(["mock", "live"]).default("mock"),
-  YT_DLP_BIN: z.string().default("yt-dlp"),
-  FFMPEG_BIN: z.string().default("ffmpeg"),
+  PIPELINE_MODE: z.enum(['mock', 'live']).default('mock'),
+  YT_DLP_BIN: z.string().default('yt-dlp'),
+  FFMPEG_BIN: z.string().default('ffmpeg'),
   DASHSCOPE_API_URL: z
     .string()
-    .default("https://dashscope.aliyuncs.com/api/v1"),
+    .default('https://dashscope.aliyuncs.com/api/v1'),
   DASHSCOPE_API_KEY: z.string().optional(),
-  FUN_ASR_MODEL: z.string().default("fun-asr"),
+  FUN_ASR_MODEL: z.string().default('fun-asr'),
   OSS_REGION: z.string().optional(),
   OSS_BUCKET: z.string().optional(),
   OSS_ACCESS_KEY_ID: z.string().optional(),
   OSS_ACCESS_KEY_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-3-pro-preview"),
-  SQLITE_DB_PATH: z.string().default("data/grillmaster.db"),
+  GEMINI_MODEL: z.string().default('gemini-3-pro-preview'),
+  SQLITE_DB_PATH: z.string().default('data/grillmaster.db'),
 });
 
 export const env = EnvSchema.parse({
@@ -35,22 +35,22 @@ export const env = EnvSchema.parse({
 });
 
 export const ensureLivePipelineEnv = () => {
-  if (env.PIPELINE_MODE !== "live") {
+  if (env.PIPELINE_MODE !== 'live') {
     return;
   }
 
   const required: Array<[string, string | undefined]> = [
-    ["DASHSCOPE_API_KEY", env.DASHSCOPE_API_KEY],
-    ["OSS_REGION", env.OSS_REGION],
-    ["OSS_BUCKET", env.OSS_BUCKET],
-    ["OSS_ACCESS_KEY_ID", env.OSS_ACCESS_KEY_ID],
-    ["OSS_ACCESS_KEY_SECRET", env.OSS_ACCESS_KEY_SECRET],
-    ["GEMINI_API_KEY", env.GEMINI_API_KEY],
+    ['DASHSCOPE_API_KEY', env.DASHSCOPE_API_KEY],
+    ['OSS_REGION', env.OSS_REGION],
+    ['OSS_BUCKET', env.OSS_BUCKET],
+    ['OSS_ACCESS_KEY_ID', env.OSS_ACCESS_KEY_ID],
+    ['OSS_ACCESS_KEY_SECRET', env.OSS_ACCESS_KEY_SECRET],
+    ['GEMINI_API_KEY', env.GEMINI_API_KEY],
   ];
 
   const missing = required.filter(([, value]) => !value).map(([key]) => key);
 
   if (missing.length > 0) {
-    throw new Error(`Missing live pipeline env: ${missing.join(", ")}`);
+    throw new Error(`Missing live pipeline env: ${missing.join(', ')}`);
   }
 };

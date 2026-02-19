@@ -2,11 +2,11 @@ import {
   ConflictError,
   InfrastructureError,
   ValidationError,
-} from "@server/core/errors";
-import type { TrpcContext } from "@server/trpc/context";
-import { initTRPC, TRPCError } from "@trpc/server";
-import superjson from "superjson";
-import { ZodError } from "zod";
+} from '@server/core/errors';
+import type { TrpcContext } from '@server/trpc/context';
+import { initTRPC, TRPCError } from '@trpc/server';
+import superjson from 'superjson';
+import { ZodError } from 'zod';
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -25,7 +25,7 @@ const t = initTRPC.context<TrpcContext>().create({
 const toTrpcError = (error: unknown) => {
   if (error instanceof ValidationError) {
     return new TRPCError({
-      code: "BAD_REQUEST",
+      code: 'BAD_REQUEST',
       message: error.message,
       cause: error,
     });
@@ -33,7 +33,7 @@ const toTrpcError = (error: unknown) => {
 
   if (error instanceof ConflictError) {
     return new TRPCError({
-      code: "CONFLICT",
+      code: 'CONFLICT',
       message: error.message,
       cause: error,
     });
@@ -41,15 +41,15 @@ const toTrpcError = (error: unknown) => {
 
   if (error instanceof InfrastructureError) {
     return new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
+      code: 'INTERNAL_SERVER_ERROR',
       message: error.message,
       cause: error,
     });
   }
 
   return new TRPCError({
-    code: "INTERNAL_SERVER_ERROR",
-    message: "Unexpected server error",
+    code: 'INTERNAL_SERVER_ERROR',
+    message: 'Unexpected server error',
     cause: error instanceof Error ? error : undefined,
   });
 };

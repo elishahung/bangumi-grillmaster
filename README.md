@@ -29,6 +29,9 @@
 - Project 詳情頁：播放影片、載入字幕、同步 watch progress
 - Tasks 頁：polling 顯示任務歷史與目前進度
 - Task 詳情頁：查看 task event timeline
+- Task 支援手動取消（safe-point），並顯示取消/失敗錯誤細節
+- Task pipeline 採 step checkpoint，可從失敗步驟續跑
+- Task events 會記錄 step start/end、log level、duration 與 error message
 - Mobile-friendly responsive layout
 
 ## Local Development
@@ -90,7 +93,8 @@ pnpm db:migrate
 
 - `projects`: 專案主資料、來源資訊、成本與媒體路徑
 - `tasks`: 任務狀態與進度
-- `taskEvents`: 任務歷程事件
+- `taskEvents`: 任務歷程事件（含 level、step、duration、error）
+- `taskStepStates`: 每個步驟的 checkpoint 狀態與輸出（resumable 依據）
 - `watchProgress`: 每個 viewer 在各 project 的觀看進度
 
 ## Static Media Route

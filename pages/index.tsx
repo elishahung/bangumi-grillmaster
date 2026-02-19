@@ -1,19 +1,19 @@
-import Head from "next/head";
-import Link from "next/link";
-import { useMemo } from "react";
-import { SectionHeading } from "@/components/layout/section-heading";
-import { ProjectGrid } from "@/components/project/project-grid";
-import { SubmitProjectForm } from "@/components/project/submit-project-form";
-import { TaskList } from "@/components/task/task-list";
-import { Button } from "@/components/ui/button";
+import Head from 'next/head';
+import Link from 'next/link';
+import { useMemo } from 'react';
+import { SectionHeading } from '@/components/layout/section-heading';
+import { ProjectGrid } from '@/components/project/project-grid';
+import { SubmitProjectForm } from '@/components/project/submit-project-form';
+import { TaskList } from '@/components/task/task-list';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { trpc } from "@/lib/trpc";
+} from '@/components/ui/card';
+import { trpc } from '@/lib/trpc';
 
 export default function SubmitPage() {
   const projectsQuery = trpc.listProjects.useQuery(undefined, {
@@ -35,8 +35,6 @@ export default function SubmitPage() {
       </Head>
       <div className="space-y-6">
         <SectionHeading
-          title="Bangumi GrillMaster Dashboard"
-          description="提交新影片，並追蹤轉換狀態與處理任務。"
           actions={
             <div className="flex gap-2">
               <Link href="/projects">
@@ -49,6 +47,8 @@ export default function SubmitPage() {
               </Link>
             </div>
           }
+          description="提交新影片，並追蹤轉換狀態與處理任務。"
+          title="Bangumi GrillMaster Dashboard"
         />
 
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -71,7 +71,6 @@ export default function SubmitPage() {
 
         <section className="space-y-3">
           <SectionHeading
-            title="Recent Projects"
             actions={
               <Link href="/projects">
                 <Button size="sm" variant="ghost">
@@ -79,6 +78,7 @@ export default function SubmitPage() {
                 </Button>
               </Link>
             }
+            title="Recent Projects"
           />
           <ProjectGrid
             emptyText="尚未有專案，先提交第一支影片。"
@@ -88,7 +88,6 @@ export default function SubmitPage() {
 
         <section className="space-y-3">
           <SectionHeading
-            title="Recent Tasks"
             actions={
               <Link href="/tasks">
                 <Button size="sm" variant="ghost">
@@ -96,6 +95,7 @@ export default function SubmitPage() {
                 </Button>
               </Link>
             }
+            title="Recent Tasks"
           />
           <TaskList tasks={tasksQuery.data ?? []} />
         </section>

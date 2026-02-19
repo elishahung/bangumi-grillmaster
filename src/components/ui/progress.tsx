@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 export const Progress = ({
   value,
@@ -12,7 +12,7 @@ export const Progress = ({
   return (
     <div
       className={cn(
-        "h-2 w-full overflow-hidden rounded-full bg-zinc-200",
+        'h-2 w-full overflow-hidden rounded-full bg-zinc-200',
         className,
       )}
     >

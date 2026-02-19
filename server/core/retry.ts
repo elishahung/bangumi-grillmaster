@@ -1,18 +1,18 @@
-import { PipelineError } from "@server/core/errors";
+import { PipelineError } from '@server/core/errors';
 import {
   errAsync,
   okAsync,
   type ResultAsync as RA,
   ResultAsync,
-} from "neverthrow";
+} from 'neverthrow';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface RetryOptions {
-  maxRetries: number;
   baseDelayMs: number;
-  maxDelayMs?: number;
   jitter?: boolean;
+  maxDelayMs?: number;
+  maxRetries: number;
 }
 
 const withJitter = (delay: number) => delay * (0.75 + Math.random() * 0.5);

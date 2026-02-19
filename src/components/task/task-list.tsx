@@ -1,9 +1,9 @@
-import type { TaskRow } from "@shared/view-models";
-import Link from "next/link";
-import { toTaskBadgeVariant } from "@/components/task/status";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import type { TaskRow } from '@shared/view-models';
+import Link from 'next/link';
+import { toTaskBadgeVariant } from '@/components/task/status';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 
 export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
   if (tasks.length === 0) {
@@ -25,13 +25,16 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
           key={task._id}
         >
           <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold">{task.currentStep}</p>
+            <p className="font-semibold text-sm">{task.currentStep}</p>
             <Badge variant={toTaskBadgeVariant(task.status)}>
               {task.status}
             </Badge>
           </div>
           <Progress value={task.progressPercent} />
           <p className="mt-2 text-xs text-zinc-600">{task.message}</p>
+          {task.errorMessage ? (
+            <p className="mt-1 text-rose-700 text-xs">{task.errorMessage}</p>
+          ) : null}
           <p className="mt-1 text-xs text-zinc-500">taskId: {task.taskId}</p>
         </Link>
       ))}

@@ -1,19 +1,21 @@
-import { db, initDb } from "@server/db/client";
+import { db, initDb } from '@server/db/client';
 import {
   projectsTable,
   taskEventsTable,
+  taskStepStatesTable,
   tasksTable,
   watchProgressTable,
-} from "@server/db/schema";
+} from '@server/db/schema';
 import type {
   ProjectDetail,
   ProjectRow,
   TaskDetail,
   TaskEventRow,
   TaskRow,
+  TaskStepStateRow,
   WatchProgressRow,
-} from "@shared/view-models";
-import { and, desc, eq } from "drizzle-orm";
+} from '@shared/view-models';
+import { and, desc, eq } from 'drizzle-orm';
 
 const now = () => Date.now();
 
@@ -53,6 +55,8 @@ const toTaskRow = (row: typeof tasksTable.$inferSelect): TaskRow => ({
   startedAt: row.startedAt ?? undefined,
   finishedAt: row.finishedAt ?? undefined,
   errorMessage: row.errorMessage ?? undefined,
+  cancelRequestedAt: row.cancelRequestedAt ?? undefined,
+  canceledAt: row.canceledAt ?? undefined,
 });
 
 const toTaskEventRow = (
@@ -61,9 +65,32 @@ const toTaskEventRow = (
   _id: row.id,
   taskId: row.taskId,
   projectId: row.projectId,
+  level: (row.level as TaskEventRow['level']) ?? 'info',
+  step: row.step,
+  eventType: (row.eventType as TaskEventRow['eventType']) ?? 'system',
   message: row.message,
   percent: row.percent,
+  durationMs: row.durationMs ?? undefined,
+  errorMessage: row.errorMessage ?? undefined,
   createdAt: row.createdAt,
+});
+
+const toTaskStepStateRow = (
+  row: typeof taskStepStatesTable.$inferSelect,
+): TaskStepStateRow => ({
+  _id: row.id,
+  taskId: row.taskId,
+  projectId: row.projectId,
+  step: row.step,
+  status: row.status as TaskStepStateRow['status'],
+  attempt: row.attempt,
+  startedAt: row.startedAt ?? undefined,
+  finishedAt: row.finishedAt ?? undefined,
+  durationMs: row.durationMs ?? undefined,
+  errorMessage: row.errorMessage ?? undefined,
+  outputJson: row.outputJson ?? undefined,
+  createdAt: row.createdAt,
+  updatedAt: row.updatedAt,
 });
 
 const toWatchProgressRow = (
@@ -79,6 +106,35 @@ const toWatchProgressRow = (
 
 export const repository = {
   init: () => initDb(),
+
+  appendTaskEvent: async (input: {
+    taskId: string;
+    projectId: string;
+    step?: string;
+    eventType?: TaskEventRow['eventType'];
+    level?: TaskEventRow['level'];
+    message: string;
+    percent: number;
+    durationMs?: number;
+    errorMessage?: string;
+  }) => {
+    initDb();
+    await db.insert(taskEventsTable).values({
+      id: crypto.randomUUID(),
+      taskId: input.taskId,
+      projectId: input.projectId,
+      level: input.level ?? 'info',
+      step: input.step ?? 'system',
+      eventType: input.eventType ?? 'system',
+      message: input.message,
+      percent: input.percent,
+      durationMs: input.durationMs,
+      errorMessage: input.errorMessage,
+      createdAt: now(),
+    });
+
+    return { ok: true as const };
+  },
 
   submitProject: async (input: {
     source: string;
@@ -99,7 +155,7 @@ export const repository = {
       .limit(1);
 
     if (duplicated.length > 0) {
-      throw new Error("Project already exists for this source and videoId");
+      throw new Error('Project already exists for this source and videoId');
     }
 
     const createdAt = now();
@@ -113,7 +169,7 @@ export const repository = {
       sourceVideoId: input.sourceVideoId,
       originalInput: input.originalInput,
       translationHint: input.translationHint,
-      status: "queued",
+      status: 'queued',
       llmCostTwd: 0,
       createdAt,
       updatedAt: createdAt,
@@ -123,25 +179,26 @@ export const repository = {
       id: crypto.randomUUID(),
       taskId,
       projectId,
-      type: "pipeline",
-      status: "queued",
-      currentStep: "submit",
+      type: 'pipeline',
+      status: 'queued',
+      currentStep: 'submit',
       progressPercent: 0,
-      message: "Project submitted",
+      message: 'Project submitted',
       createdAt,
       updatedAt: createdAt,
     });
 
-    await db.insert(taskEventsTable).values({
-      id: crypto.randomUUID(),
+    await repository.appendTaskEvent({
       taskId,
       projectId,
-      message: "Project created and queued",
+      message: 'Project created and queued',
       percent: 0,
-      createdAt,
+      eventType: 'system',
+      step: 'submit',
+      level: 'info',
     });
 
-    return { projectId, taskId, status: "queued" as const };
+    return { projectId, taskId, status: 'queued' as const };
   },
 
   listProjects: async (): Promise<ProjectRow[]> => {
@@ -245,6 +302,17 @@ export const repository = {
     return rows.map(toTaskRow);
   },
 
+  getTaskRuntime: async (taskId: string): Promise<TaskRow | null> => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(tasksTable)
+      .where(eq(tasksTable.taskId, taskId))
+      .limit(1);
+
+    return rows[0] ? toTaskRow(rows[0]) : null;
+  },
+
   getTaskById: async (taskId: string): Promise<TaskDetail | null> => {
     initDb();
     const rows = await db
@@ -263,7 +331,7 @@ export const repository = {
       .from(taskEventsTable)
       .where(eq(taskEventsTable.taskId, taskId))
       .orderBy(desc(taskEventsTable.createdAt))
-      .limit(200);
+      .limit(400);
 
     return {
       ...toTaskRow(task),
@@ -278,6 +346,9 @@ export const repository = {
     percent: number;
     message: string;
     errorMessage?: string;
+    eventType?: TaskEventRow['eventType'];
+    level?: TaskEventRow['level'];
+    durationMs?: number;
   }) => {
     initDb();
     const rows = await db
@@ -288,10 +359,13 @@ export const repository = {
 
     const task = rows[0];
     if (!task) {
-      throw new Error("Task not found");
+      throw new Error('Task not found');
     }
 
     const updatedAt = now();
+    const isTerminal = ['completed', 'failed', 'canceled'].includes(
+      input.status,
+    );
 
     await db
       .update(tasksTable)
@@ -302,44 +376,390 @@ export const repository = {
         message: input.message,
         updatedAt,
         startedAt: task.startedAt ?? updatedAt,
-        finishedAt:
-          input.status === "completed" || input.status === "failed"
-            ? updatedAt
-            : null,
-        errorMessage: input.errorMessage,
+        finishedAt: isTerminal ? updatedAt : null,
+        errorMessage: input.errorMessage ?? null,
       })
       .where(eq(tasksTable.id, task.id));
 
-    await db.insert(taskEventsTable).values({
-      id: crypto.randomUUID(),
+    await repository.appendTaskEvent({
       taskId: task.taskId,
       projectId: task.projectId,
+      step: input.step,
+      eventType: input.eventType ?? 'system',
+      level: input.level ?? (input.errorMessage ? 'error' : 'info'),
       message: input.message,
       percent: input.percent,
-      createdAt: updatedAt,
+      durationMs: input.durationMs,
+      errorMessage: input.errorMessage,
     });
 
     return { ok: true };
+  },
+
+  getTaskStepStates: async (taskId: string): Promise<TaskStepStateRow[]> => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(taskStepStatesTable)
+      .where(eq(taskStepStatesTable.taskId, taskId))
+      .orderBy(desc(taskStepStatesTable.updatedAt));
+
+    return rows.map(toTaskStepStateRow);
+  },
+
+  upsertTaskStepState: async (input: {
+    taskId: string;
+    projectId: string;
+    step: string;
+    status: TaskStepStateRow['status'];
+    attempt?: number;
+    startedAt?: number;
+    finishedAt?: number;
+    durationMs?: number;
+    errorMessage?: string;
+    outputJson?: string;
+  }) => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(taskStepStatesTable)
+      .where(
+        and(
+          eq(taskStepStatesTable.taskId, input.taskId),
+          eq(taskStepStatesTable.step, input.step),
+        ),
+      )
+      .limit(1);
+
+    const existing = rows[0];
+    const updatedAt = now();
+
+    if (existing) {
+      await db
+        .update(taskStepStatesTable)
+        .set({
+          status: input.status,
+          attempt: input.attempt ?? existing.attempt,
+          startedAt: input.startedAt ?? existing.startedAt,
+          finishedAt: input.finishedAt,
+          durationMs: input.durationMs,
+          errorMessage: input.errorMessage,
+          outputJson: input.outputJson ?? existing.outputJson,
+          updatedAt,
+        })
+        .where(eq(taskStepStatesTable.id, existing.id));
+
+      return { ok: true as const };
+    }
+
+    await db.insert(taskStepStatesTable).values({
+      id: crypto.randomUUID(),
+      taskId: input.taskId,
+      projectId: input.projectId,
+      step: input.step,
+      status: input.status,
+      attempt: input.attempt ?? 0,
+      startedAt: input.startedAt,
+      finishedAt: input.finishedAt,
+      durationMs: input.durationMs,
+      errorMessage: input.errorMessage,
+      outputJson: input.outputJson,
+      createdAt: updatedAt,
+      updatedAt,
+    });
+
+    return { ok: true as const };
+  },
+
+  markStepStart: async (input: {
+    taskId: string;
+    projectId: string;
+    step: string;
+  }) => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(taskStepStatesTable)
+      .where(
+        and(
+          eq(taskStepStatesTable.taskId, input.taskId),
+          eq(taskStepStatesTable.step, input.step),
+        ),
+      )
+      .limit(1);
+
+    const existing = rows[0];
+    const startedAt = now();
+
+    await repository.upsertTaskStepState({
+      taskId: input.taskId,
+      projectId: input.projectId,
+      step: input.step,
+      status: 'running',
+      attempt: (existing?.attempt ?? 0) + 1,
+      startedAt,
+      finishedAt: undefined,
+      durationMs: undefined,
+      errorMessage: undefined,
+    });
+
+    return { startedAt };
+  },
+
+  markStepEnd: async (input: {
+    taskId: string;
+    projectId: string;
+    step: string;
+    status: 'completed' | 'failed' | 'canceled';
+    errorMessage?: string;
+    outputJson?: string;
+  }) => {
+    initDb();
+    const rows = await db
+      .select()
+      .from(taskStepStatesTable)
+      .where(
+        and(
+          eq(taskStepStatesTable.taskId, input.taskId),
+          eq(taskStepStatesTable.step, input.step),
+        ),
+      )
+      .limit(1);
+
+    const existing = rows[0];
+    const finishedAt = now();
+    const startedAt = existing?.startedAt ?? finishedAt;
+    const durationMs = Math.max(0, finishedAt - startedAt);
+
+    await repository.upsertTaskStepState({
+      taskId: input.taskId,
+      projectId: input.projectId,
+      step: input.step,
+      status: input.status,
+      attempt: existing?.attempt ?? 1,
+      startedAt,
+      finishedAt,
+      durationMs,
+      errorMessage: input.errorMessage,
+      outputJson: input.outputJson,
+    });
+
+    return { finishedAt, durationMs };
+  },
+
+  requestTaskCancel: async (taskId: string) => {
+    initDb();
+    const task = await repository.getTaskRuntime(taskId);
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    const updatedAt = now();
+
+    if (['completed', 'failed', 'canceled'].includes(task.status)) {
+      return {
+        taskId: task.taskId,
+        projectId: task.projectId,
+        status: task.status,
+      };
+    }
+
+    if (task.status === 'queued') {
+      await db
+        .update(tasksTable)
+        .set({
+          status: 'canceled',
+          currentStep: 'canceled',
+          message: 'Task canceled before execution',
+          finishedAt: updatedAt,
+          canceledAt: updatedAt,
+          cancelRequestedAt: updatedAt,
+          errorMessage: 'Canceled by user',
+          updatedAt,
+        })
+        .where(eq(tasksTable.taskId, taskId));
+
+      await repository.updateProjectFromPipeline({
+        projectId: task.projectId,
+        status: 'canceled',
+      });
+
+      await repository.appendTaskEvent({
+        taskId,
+        projectId: task.projectId,
+        step: 'canceled',
+        eventType: 'system',
+        level: 'warn',
+        message: 'Task canceled before execution',
+        percent: task.progressPercent,
+        errorMessage: 'Canceled by user',
+      });
+
+      return {
+        taskId: task.taskId,
+        projectId: task.projectId,
+        status: 'canceled' as const,
+      };
+    }
+
+    await db
+      .update(tasksTable)
+      .set({
+        status: 'canceling',
+        message: 'Cancel requested; stopping at next safe point',
+        cancelRequestedAt: updatedAt,
+        updatedAt,
+      })
+      .where(eq(tasksTable.taskId, taskId));
+
+    await repository.updateProjectFromPipeline({
+      projectId: task.projectId,
+      status: 'canceling',
+    });
+
+    await repository.appendTaskEvent({
+      taskId,
+      projectId: task.projectId,
+      step: task.currentStep,
+      eventType: 'system',
+      level: 'warn',
+      message: 'Cancel requested; waiting for current step to finish',
+      percent: task.progressPercent,
+    });
+
+    return {
+      taskId: task.taskId,
+      projectId: task.projectId,
+      status: 'canceling' as const,
+    };
+  },
+
+  isTaskCancelRequested: async (taskId: string) => {
+    initDb();
+    const rows = await db
+      .select({
+        cancelRequestedAt: tasksTable.cancelRequestedAt,
+        status: tasksTable.status,
+      })
+      .from(tasksTable)
+      .where(eq(tasksTable.taskId, taskId))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) {
+      throw new Error('Task not found');
+    }
+
+    return Boolean(row.cancelRequestedAt) || row.status === 'canceling';
+  },
+
+  markTaskCanceled: async (input: {
+    taskId: string;
+    reason: string;
+    step: string;
+    percent: number;
+  }) => {
+    initDb();
+    const task = await repository.getTaskRuntime(input.taskId);
+    if (!task) {
+      throw new Error('Task not found');
+    }
+
+    const updatedAt = now();
+
+    await db
+      .update(tasksTable)
+      .set({
+        status: 'canceled',
+        currentStep: input.step,
+        message: input.reason,
+        errorMessage: input.reason,
+        canceledAt: updatedAt,
+        finishedAt: updatedAt,
+        cancelRequestedAt: task.cancelRequestedAt ?? updatedAt,
+        updatedAt,
+      })
+      .where(eq(tasksTable.taskId, input.taskId));
+
+    await repository.updateProjectFromPipeline({
+      projectId: task.projectId,
+      status: 'canceled',
+    });
+
+    await repository.appendTaskEvent({
+      taskId: input.taskId,
+      projectId: task.projectId,
+      step: input.step,
+      eventType: 'error',
+      level: 'warn',
+      message: input.reason,
+      percent: input.percent,
+      errorMessage: input.reason,
+    });
+
+    return { ok: true as const };
   },
 
   retryTask: async (taskId: string) => {
     initDb();
     const task = await repository.getTaskById(taskId);
     if (!task) {
-      throw new Error("Task not found");
+      throw new Error('Task not found');
     }
 
-    await repository.updateTaskProgress({
-      taskId: task.taskId,
-      status: "queued",
-      step: "retry",
-      percent: 0,
-      message: "Task retried and queued",
-    });
+    const updatedAt = now();
+
+    await db
+      .update(tasksTable)
+      .set({
+        status: 'queued',
+        currentStep: 'retry',
+        message: 'Task retried and queued',
+        progressPercent: 0,
+        errorMessage: null,
+        cancelRequestedAt: null,
+        canceledAt: null,
+        finishedAt: null,
+        updatedAt,
+      })
+      .where(eq(tasksTable.taskId, taskId));
 
     await repository.updateProjectFromPipeline({
       projectId: task.projectId,
-      status: "queued",
+      status: 'queued',
+    });
+
+    const stepRows = await db
+      .select()
+      .from(taskStepStatesTable)
+      .where(eq(taskStepStatesTable.taskId, taskId));
+
+    await Promise.all(
+      stepRows
+        .filter((row) => row.status !== 'completed')
+        .map((row) =>
+          db
+            .update(taskStepStatesTable)
+            .set({
+              status: 'pending',
+              startedAt: null,
+              finishedAt: null,
+              durationMs: null,
+              errorMessage: null,
+              updatedAt,
+            })
+            .where(eq(taskStepStatesTable.id, row.id)),
+        ),
+    );
+
+    await repository.appendTaskEvent({
+      taskId: task.taskId,
+      projectId: task.projectId,
+      step: 'retry',
+      eventType: 'system',
+      level: 'info',
+      message: 'Task retried and queued',
+      percent: 0,
     });
 
     return { taskId: task.taskId, projectId: task.projectId };

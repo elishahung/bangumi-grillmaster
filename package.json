@@ -4,16 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "check": "tsc --noEmit",
     "lint": "ultracite check .",
     "format": "ultracite fix .",
-    "check": "biome check . && tsc --noEmit",
     "db:migrate": "drizzle-kit migrate",
     "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "fix": "ultracite fix"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +28,7 @@
     "@trpc/server": "^11.10.0",
     "ali-oss": "^6.23.0",
     "better-sqlite3": "^12.6.2",
+    "chalk": "^5.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.1",
@@ -41,7 +42,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.2",
+    "@biomejs/biome": "^2.4.0",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/ali-oss": "^6.23.3",
     "@types/better-sqlite3": "^7.6.13",
@@ -52,7 +53,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.2.0",
     "typescript": "^5.9.3",
-    "ultracite": "^7.2.3"
+    "ultracite": "7.2.3"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

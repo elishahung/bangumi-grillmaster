@@ -1,20 +1,20 @@
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { trpc } from "@/lib/trpc";
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { trpc } from '@/lib/trpc';
 
 export const SubmitProjectForm = () => {
-  const [sourceOrUrl, setSourceOrUrl] = useState("");
-  const [translationHint, setTranslationHint] = useState("");
+  const [sourceOrUrl, setSourceOrUrl] = useState('');
+  const [translationHint, setTranslationHint] = useState('');
   const submitMutation = trpc.submitProject.useMutation();
 
   const isSubmitDisabled = useMemo(
@@ -32,7 +32,7 @@ export const SubmitProjectForm = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="sourceOrUrl">
+          <label className="font-medium text-sm" htmlFor="sourceOrUrl">
             Video URL / Video ID
           </label>
           <Input
@@ -43,7 +43,7 @@ export const SubmitProjectForm = () => {
           />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="hint">
+          <label className="font-medium text-sm" htmlFor="hint">
             Translation Hint (Optional)
           </label>
           <Textarea
@@ -62,10 +62,10 @@ export const SubmitProjectForm = () => {
             });
           }}
         >
-          {submitMutation.isPending ? "Submitting..." : "Submit Project"}
+          {submitMutation.isPending ? 'Submitting...' : 'Submit Project'}
         </Button>
         {submitMutation.data ? (
-          <div className="space-y-1 text-sm text-emerald-700">
+          <div className="space-y-1 text-emerald-700 text-sm">
             <p>建立成功：projectId = {submitMutation.data.projectId}</p>
             <Link
               className="font-medium underline"
@@ -76,7 +76,7 @@ export const SubmitProjectForm = () => {
           </div>
         ) : null}
         {submitMutation.error ? (
-          <p className="text-sm text-rose-700">
+          <p className="text-rose-700 text-sm">
             {submitMutation.error.message}
           </p>
         ) : null}

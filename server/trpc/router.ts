@@ -1,7 +1,7 @@
-import { getTaskPipelineRunner } from "@server/pipeline/runner";
-import { createTrpcError, publicProcedure, router } from "@server/trpc/trpc";
-import { SubmitProjectInputSchema } from "@shared/domain";
-import { z } from "zod";
+import { getTaskPipelineRunner } from '@server/pipeline/runner';
+import { createTrpcError, publicProcedure, router } from '@server/trpc/trpc';
+import { SubmitProjectInputSchema } from '@shared/domain';
+import { z } from 'zod';
 
 export const appRouter = router({
   submitProject: publicProcedure
@@ -22,7 +22,7 @@ export const appRouter = router({
     }),
 
   listProjects: publicProcedure.query(async ({ ctx }) => {
-    return ctx.projectService.listProjects().match(
+    return await ctx.projectService.listProjects().match(
       (value) => value,
       (error) => {
         throw createTrpcError(error);
@@ -31,9 +31,9 @@ export const appRouter = router({
   }),
 
   projectById: publicProcedure
-    .input(z.object({ projectId: z.string().uuid() }))
+    .input(z.object({ projectId: z.uuid() }))
     .query(async ({ ctx, input }) => {
-      return ctx.projectService.getProjectById(input.projectId).match(
+      return await ctx.projectService.getProjectById(input.projectId).match(
         (value) => value,
         (error) => {
           throw createTrpcError(error);
@@ -46,7 +46,7 @@ export const appRouter = router({
       z.object({ limit: z.number().int().positive().optional() }).optional(),
     )
     .query(async ({ ctx, input }) => {
-      return ctx.projectService.listTasks(input?.limit).match(
+      return await ctx.projectService.listTasks(input?.limit).match(
         (value) => value,
         (error) => {
           throw createTrpcError(error);
@@ -57,7 +57,7 @@ export const appRouter = router({
   taskById: publicProcedure
     .input(z.object({ taskId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      return ctx.projectService.getTaskById(input.taskId).match(
+      return await ctx.projectService.getTaskById(input.taskId).match(
         (value) => value,
         (error) => {
           throw createTrpcError(error);
@@ -79,17 +79,28 @@ export const appRouter = router({
       return { ok: true };
     }),
 
+  cancelTask: publicProcedure
+    .input(z.object({ taskId: z.uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      return await ctx.projectService.cancelTask(input.taskId).match(
+        (value) => value,
+        (error) => {
+          throw createTrpcError(error);
+        },
+      );
+    }),
+
   upsertWatchProgress: publicProcedure
     .input(
       z.object({
-        projectId: z.string().uuid(),
-        viewerId: z.string().uuid(),
+        projectId: z.uuid(),
+        viewerId: z.uuid(),
         positionSec: z.number().nonnegative(),
         durationSec: z.number().positive(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.projectService.upsertWatchProgress(input).match(
+      return await ctx.projectService.upsertWatchProgress(input).match(
         (value) => value,
         (error) => {
           throw createTrpcError(error);
