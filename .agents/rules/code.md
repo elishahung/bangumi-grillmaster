@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Rules
 - watch README.md to understand project structure.
 - use pnpm.

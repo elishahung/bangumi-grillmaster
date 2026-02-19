@@ -825,7 +825,8 @@ export const repository = {
       )
       .limit(1);
 
-    if (existing.length > 0) {
+    const existingRow = existing[0];
+    if (existingRow) {
       await db
         .update(watchProgressTable)
         .set({
@@ -833,7 +834,7 @@ export const repository = {
           durationSec: input.durationSec,
           updatedAt,
         })
-        .where(eq(watchProgressTable.id, existing[0]!.id));
+        .where(eq(watchProgressTable.id, existingRow.id));
     } else {
       await db.insert(watchProgressTable).values({
         id: crypto.randomUUID(),

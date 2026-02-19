@@ -98,86 +98,82 @@ export default function ProjectDetailPage() {
             </Dialog>
           )}
         </div>
-        {projectQuery.isLoading ? (
-          <Card>
-            <CardContent className="p-6 text-sm text-zinc-600">
-              Loading project...
-            </CardContent>
-          </Card>
-        ) : projectQuery.error ? (
-          <Card>
-            <CardContent className="p-6 text-rose-700 text-sm">
-              Failed to load project: {projectQuery.error.message}
-            </CardContent>
-          </Card>
-        ) : project ? (
-          <div className="space-y-8">
-            <ProjectDetailHeader project={project} />
+        {(() => {
+          if (projectQuery.isLoading) {
+            return (
+              <Card>
+                <CardContent className="p-6 text-sm text-zinc-600">
+                  Loading project...
+                </CardContent>
+              </Card>
+            );
+          }
+          if (projectQuery.error) {
+            return (
+              <Card>
+                <CardContent className="p-6 text-rose-700 text-sm">
+                  Failed to load project: {projectQuery.error.message}
+                </CardContent>
+              </Card>
+            );
+          }
+          if (project) {
+            return (
+              <div className="space-y-8">
+                <ProjectDetailHeader project={project} />
 
-            {showVideo ? <ProjectPlayerCard project={project} /> : null}
+                {showVideo ? <ProjectPlayerCard project={project} /> : null}
 
-            {task && (
-              <Collapsible
-                className="space-y-2"
-                onOpenChange={setIsTaskExpanded}
-                open={!isCompleted || isTaskExpanded}
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-lg tracking-tight">
-                    Task Status
-                  </h3>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      className={cn(
-                        'w-9 p-0',
-                        !isCompleted && 'pointer-events-none opacity-0',
-                      )}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      {!isCompleted || isTaskExpanded ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                      <span className="sr-only">Toggle Task Details</span>
-                    </Button>
-                  </CollapsibleTrigger>
-                </div>
-                <CollapsibleContent className="space-y-6">
-                  <ActiveTaskViewer
-                    isCompleted={isCompleted}
-                    isTaskExpanded={isTaskExpanded}
-                    setIsTaskExpanded={setIsTaskExpanded}
-                    taskId={task.taskId}
-                  />
-                </CollapsibleContent>
-              </Collapsible>
-            )}
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="p-6 text-sm text-zinc-600">
-              Project not found.
-            </CardContent>
-          </Card>
-        )}
+                {task && (
+                  <Collapsible
+                    className="space-y-2"
+                    onOpenChange={setIsTaskExpanded}
+                    open={!isCompleted || isTaskExpanded}
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-lg tracking-tight">
+                        Task Status
+                      </h3>
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          className={cn(
+                            'w-9 p-0',
+                            !isCompleted && 'pointer-events-none opacity-0',
+                          )}
+                          size="sm"
+                          variant="ghost"
+                        >
+                          {!isCompleted || isTaskExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                          <span className="sr-only">Toggle Task Details</span>
+                        </Button>
+                      </CollapsibleTrigger>
+                    </div>
+                    <CollapsibleContent className="space-y-6">
+                      <ActiveTaskViewer taskId={task.taskId} />
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </div>
+            );
+          }
+          return (
+            <Card>
+              <CardContent className="p-6 text-sm text-zinc-600">
+                Project not found.
+              </CardContent>
+            </Card>
+          );
+        })()}
       </section>
     </>
   );
 }
 
-function ActiveTaskViewer({
-  taskId,
-  isCompleted,
-  isTaskExpanded,
-  setIsTaskExpanded,
-}: {
-  taskId: string;
-  isCompleted: boolean;
-  isTaskExpanded: boolean;
-  setIsTaskExpanded: (v: boolean) => void;
-}) {
+function ActiveTaskViewer({ taskId }: { taskId: string }) {
   const taskQuery = trpc.taskById.useQuery(
     { taskId },
     { refetchInterval: 2500 },

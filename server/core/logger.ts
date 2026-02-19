@@ -31,7 +31,7 @@ export const createTaskLogger = (input: {
   step: string;
   percent: number;
 }): TaskLogger => {
-  const write = async (
+  const write = (
     level: TaskEventRow['level'],
     message: string,
     errorMessage?: string,
