@@ -6,7 +6,7 @@ import {
 import type { TrpcContext } from '@server/trpc/context'
 import { initTRPC, TRPCError } from '@trpc/server'
 import superjson from 'superjson'
-import { ZodError } from 'zod'
+import z, { ZodError } from 'zod'
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -16,7 +16,7 @@ const t = initTRPC.context<TrpcContext>().create({
       data: {
         ...shape.data,
         zodError:
-          error.cause instanceof ZodError ? error.cause.flatten() : null,
+          error.cause instanceof ZodError ? z.treeifyError(error.cause) : null,
       },
     }
   },

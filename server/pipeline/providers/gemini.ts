@@ -10,7 +10,7 @@ import {
 } from '@google/genai'
 import { PipelineError } from '@server/core/errors'
 import type { TaskLogger } from '@server/core/logger'
-import { retryBackoff, toPipelineError } from '@server/core/retry'
+import { toPipelineError } from '@server/core/retry'
 import { env } from '@server/env'
 import { GEMINI_SYSTEM_INSTRUCTION } from '@server/pipeline/providers/gemini-instruction'
 import type { TranslationResult } from '@server/pipeline/providers/mock'
@@ -117,15 +117,62 @@ const continueTranslation = (
     `Gemini response truncated; requesting continuation #${continuation + 1}`,
   )
 
-  return retryBackoff(
-    () =>
-      ResultAsync.fromPromise(chat.sendMessage({ message: '繼續' }), (error) =>
-        toPipelineError('translate', error, true),
-      ),
-    { maxRetries: 4, baseDelayMs: 800 },
+  return ResultAsync.fromPromise(
+    chat.sendMessage({ message: '繼續' }),
+    (error) => toPipelineError('translate', error, true),
   ).andThen((next) =>
     continueTranslation(chat, continuation + 1, sections, total, next, logger),
   )
+}
+
+const ensureFile = (
+  ai: GoogleGenAI,
+  audioPath: string,
+  cachedName: string,
+  logger?: TaskLogger,
+): ResultAsync<
+  { uri: string; name?: string; mimeType?: string },
+  PipelineError
+> => {
+  logger?.debug(`Ensuring file exists in Gemini storage: ${cachedName}`)
+
+  return ResultAsync.fromPromise(
+    ai.files.get({ name: cachedName }),
+    (error) => error as Error,
+  )
+    .andThen((file) => {
+      logger?.info(`File already exists in Gemini storage: ${cachedName}`)
+      return okAsync(file)
+    })
+    .orElse(() => {
+      logger?.info(`File not found in Gemini storage, uploading: ${cachedName}`)
+      return ResultAsync.fromPromise(
+        ai.files.upload({
+          file: audioPath,
+          config: {
+            name: cachedName,
+            mimeType: 'audio/ogg',
+          },
+        }),
+        (error) => toPipelineError('translate', error, true),
+      )
+    })
+    .andThen((file) => {
+      if (!file.uri) {
+        return errAsync(
+          new PipelineError(
+            'translate',
+            'Gemini uploaded file uri missing',
+            false,
+          ),
+        )
+      }
+      return okAsync({
+        uri: file.uri,
+        name: file.name,
+        mimeType: file.mimeType,
+      })
+    })
 }
 
 export const runGeminiTranslate = (input: {
@@ -162,92 +209,82 @@ export const runGeminiTranslate = (input: {
       .update(`${input.projectId}:${env.GEMINI_MODEL}:${env.GEMINI_API_KEY}`)
       .digest('hex')
 
-    return ResultAsync.fromPromise(
-      ai.files.upload({
-        file: input.audioPath,
-        config: {
-          name: cachedName,
-          mimeType: 'audio/ogg',
-        },
-      }),
-      (error) => toPipelineError('translate', error, true),
-    ).andThen((uploaded) => {
-      if (!uploaded.uri) {
-        return errAsync(
-          new PipelineError(
-            'translate',
-            'Gemini uploaded file uri missing',
-            false,
-          ),
-        )
-      }
-      const uploadedUri = uploaded.uri
+    return ensureFile(ai, input.audioPath, cachedName, input.logger).andThen(
+      (uploaded) => {
+        const uploadedUri = uploaded.uri
+        input.logger?.debug(`Gemini file ready: ${uploaded.name ?? cachedName}`)
 
-      input.logger?.debug(`Gemini file ready: ${uploaded.name ?? cachedName}`)
-
-      const chat = ai.chats.create({
-        model: env.GEMINI_MODEL,
-        config: {
-          systemInstruction: GEMINI_SYSTEM_INSTRUCTION,
-          safetySettings: [
-            {
-              category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-              threshold: HarmBlockThreshold.BLOCK_NONE,
+        const chat = ai.chats.create({
+          model: env.GEMINI_MODEL,
+          config: {
+            systemInstruction: GEMINI_SYSTEM_INSTRUCTION,
+            safetySettings: [
+              {
+                category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+              {
+                category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold: HarmBlockThreshold.BLOCK_NONE,
+              },
+            ],
+            thinkingConfig: {
+              thinkingLevel: ThinkingLevel.HIGH,
             },
-            {
-              category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-              threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-              threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-              threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-          ],
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.HIGH,
           },
-        },
-      })
+        })
 
-      return ResultAsync.fromPromise(
-        chat.sendMessage({
-          message: [
-            createPartFromUri(uploadedUri, uploaded.mimeType ?? 'audio/ogg'),
-            userMessage,
-          ],
-        }),
-        (error) => toPipelineError('translate', error, true),
-      )
-        .andThen((firstResponse) =>
-          continueTranslation(
-            chat,
-            0,
-            sections,
-            total,
-            firstResponse,
-            input.logger,
-          ),
+        input?.logger?.info(
+          `Request translation to Gemini with hint: ${input.translationHint}`,
         )
-        .andThen((result) =>
-          ResultAsync.fromPromise(
-            fs.writeFile(
-              input.outputSrtPath,
-              sections.join('\n<BREAK>\n'),
-              'utf8',
-            ),
-            (error) => toPipelineError('translate', error, false),
-          ).map(() => {
-            const elapsedMs = Date.now() - startedAt
-            input.logger?.info(
-              `Gemini translation output saved (${(elapsedMs / 1000).toFixed(2)}s)`,
-            )
-            return result
+        return ResultAsync.fromPromise(
+          chat.sendMessage({
+            message: [
+              createPartFromUri(uploadedUri, uploaded.mimeType ?? 'audio/ogg'),
+              userMessage,
+            ],
           }),
+          (error) => {
+            console.error('debug: gemini error')
+            console.error(error)
+            return toPipelineError('translate', error, true)
+          },
         )
-    })
+          .andThen((firstResponse) =>
+            continueTranslation(
+              chat,
+              0,
+              sections,
+              total,
+              firstResponse,
+              input.logger,
+            ),
+          )
+          .andThen((result) =>
+            ResultAsync.fromPromise(
+              fs.writeFile(
+                input.outputSrtPath,
+                sections.join('\n<BREAK>\n'),
+                'utf8',
+              ),
+              (error) => toPipelineError('translate', error, false),
+            ).map(() => {
+              const elapsedMs = Date.now() - startedAt
+              input.logger?.info(
+                `Gemini translation output saved (${(elapsedMs / 1000).toFixed(2)}s)`,
+              )
+              return result
+            }),
+          )
+      },
+    )
   })
 }

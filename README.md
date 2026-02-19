@@ -19,6 +19,7 @@
 - `tRPC` 負責 submit project、查詢與更新 watch progress
 - Backend service / pipeline 使用 `neverthrow`（Result / ResultAsync）做錯誤流與重試控制
 - ASR / 翻譯由 TypeScript provider 實作（`FunASR + Gemini`）
+- Gemini Storage 快取機制避免音檔重複上傳
 - 以 `source + sourceVideoId` 做重複提交檢查
 - 創建新元件請優先考慮使用 `pnpm dlx shadcn@latest add [component]`
 

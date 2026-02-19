@@ -9,8 +9,13 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**',
       },
+      {
+        protocol: 'http',
+        hostname: '**',
+      },
     ],
   },
+  logging: process.env.NODE_ENV === 'development' ? false : undefined,
 }
 
 export default nextConfig

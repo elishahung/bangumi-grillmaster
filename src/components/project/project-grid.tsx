@@ -96,7 +96,7 @@ export const ProjectGrid = ({
               </div>
 
               {!isCompleted && task && (
-                <div className="space-y-1.5">
+                <div className="mt-auto space-y-1.5">
                   <div className="flex justify-between text-xs">
                     <span className="font-medium text-muted-foreground">
                       {task.currentStep}
@@ -110,7 +110,7 @@ export const ProjectGrid = ({
               )}
 
               {isCompleted && mineProgress && mineProgress.durationSec > 0 && (
-                <div className="space-y-1.5">
+                <div className="mt-auto space-y-1.5">
                   <div className="flex justify-between text-xs">
                     <span className="font-medium text-muted-foreground">
                       Watched

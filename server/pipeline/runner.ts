@@ -817,6 +817,7 @@ class TaskPipelineRunner {
   }
 
   constructor() {
+    console.debug('Pipeline runner initialized')
     this.cleanupInterruptedTasks().catch((error) => {
       console.error('Failed to cleanup interrupted tasks', error)
     })
