@@ -8,12 +8,12 @@ import {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-interface RetryOptions {
+type RetryOptions = {
   baseDelayMs: number;
   jitter?: boolean;
   maxDelayMs?: number;
   maxRetries: number;
-}
+};
 
 const withJitter = (delay: number) => delay * (0.75 + Math.random() * 0.5);
 

@@ -1,13 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-export interface TranslationResult {
+export type TranslationResult = {
   inputTokens: number;
   llmModel: string;
   llmProvider: string;
   outputTokens: number;
   totalCostTwd: number;
-}
+};
 
 export const runMockAsr = async (audioPath: string, outputSrt: string) => {
   const line = path.basename(audioPath, path.extname(audioPath));

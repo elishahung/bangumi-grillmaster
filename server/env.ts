@@ -39,7 +39,7 @@ export const ensureLivePipelineEnv = () => {
     return;
   }
 
-  const required: Array<[string, string | undefined]> = [
+  const required: [string, string | undefined][] = [
     ['DASHSCOPE_API_KEY', env.DASHSCOPE_API_KEY],
     ['OSS_REGION', env.OSS_REGION],
     ['OSS_BUCKET', env.OSS_BUCKET],

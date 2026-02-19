@@ -1,6 +1,6 @@
 import { ConflictError, InfrastructureError } from '@server/core/errors';
 import { repository } from '@server/db/repository';
-import { parseSourceInput } from '@server/services/parseSource';
+import { parseSourceInput } from '@server/services/parse-source';
 import { SubmitProjectInputSchema } from '@shared/domain';
 import type {
   ProjectDetail,

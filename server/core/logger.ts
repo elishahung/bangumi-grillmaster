@@ -17,13 +17,13 @@ const colorByLevel: Record<TaskEventRow['level'], (text: string) => string> = {
   error: chalk.red,
 };
 
-export interface TaskLogger {
+export type TaskLogger = {
   debug: (message: string) => Promise<void>;
   error: (message: string, errorMessage?: string) => Promise<void>;
   info: (message: string) => Promise<void>;
   trace: (message: string) => Promise<void>;
   warn: (message: string) => Promise<void>;
-}
+};
 
 export const createTaskLogger = (input: {
   taskId: string;

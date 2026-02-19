@@ -1,4 +1,4 @@
-import { makeProjectService } from '@server/services/projectService';
+import { makeProjectService } from '@server/services/project-service';
 import type { CreateNextContextOptions } from '@trpc/server/adapters/next';
 
 export const createTrpcContext = (_opts: CreateNextContextOptions) => {

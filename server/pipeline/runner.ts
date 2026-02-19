@@ -6,7 +6,7 @@ import { retryBackoff, toPipelineError } from '@server/core/retry';
 import { repository } from '@server/db/repository';
 import { ensureLivePipelineEnv, env } from '@server/env';
 import { runCommand } from '@server/pipeline/exec';
-import { runFunAsr } from '@server/pipeline/providers/funAsr';
+import { runFunAsr } from '@server/pipeline/providers/fun-asr';
 import { runGeminiTranslate } from '@server/pipeline/providers/gemini';
 import {
   runMockAsr,

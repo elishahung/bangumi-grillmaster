@@ -1,4 +1,4 @@
-export interface ProjectRow {
+export type ProjectRow = {
   _id: string;
   createdAt: number;
   inputTokens?: number;
@@ -18,9 +18,9 @@ export interface ProjectRow {
   title?: string;
   translationHint?: string;
   updatedAt: number;
-}
+};
 
-export interface TaskRow {
+export type TaskRow = {
   _id: string;
   canceledAt?: number;
   cancelRequestedAt?: number;
@@ -36,9 +36,9 @@ export interface TaskRow {
   taskId: string;
   type: string;
   updatedAt: number;
-}
+};
 
-export interface TaskEventRow {
+export type TaskEventRow = {
   _id: string;
   createdAt: number;
   durationMs?: number;
@@ -50,9 +50,9 @@ export interface TaskEventRow {
   projectId: string;
   step: string;
   taskId: string;
-}
+};
 
-export interface TaskStepStateRow {
+export type TaskStepStateRow = {
   _id: string;
   attempt: number;
   createdAt: number;
@@ -66,22 +66,22 @@ export interface TaskStepStateRow {
   step: string;
   taskId: string;
   updatedAt: number;
-}
+};
 
-export interface WatchProgressRow {
+export type WatchProgressRow = {
   _id: string;
   durationSec: number;
   positionSec: number;
   projectId: string;
   updatedAt: number;
   viewerId: string;
-}
+};
 
-export interface ProjectDetail extends ProjectRow {
+export type ProjectDetail = ProjectRow & {
   tasks: TaskRow[];
   watchProgress: WatchProgressRow[];
-}
+};
 
-export interface TaskDetail extends TaskRow {
+export type TaskDetail = TaskRow & {
   events: TaskEventRow[];
-}
+};
