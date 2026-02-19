@@ -12,19 +12,19 @@ export const formatDate = (timestampMs: number): string => {
   const diffDay = Math.floor(diffHour / 24);
 
   if (diffDay < 1 && diffHour < 1 && diffMin < 1) {
-    return '剛剛';
+    return 'Just now';
   }
   if (diffDay < 1 && diffHour < 1) {
-    return `${diffMin} 分鐘前`;
+    return `${diffMin} minutes ago`;
   }
   if (diffDay < 1) {
-    return `${diffHour} 小時前`;
+    return `${diffHour} hours ago`;
   }
   if (diffDay < 7) {
-    return `${diffDay} 天前`;
+    return `${diffDay} days ago`;
   }
 
-  return date.toLocaleDateString('zh-TW', {
+  return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

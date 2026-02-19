@@ -45,7 +45,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.0",
+    "@biomejs/biome": "^2.4.2",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/ali-oss": "^6.23.3",
     "@types/better-sqlite3": "^7.6.13",

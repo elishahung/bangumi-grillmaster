@@ -22,7 +22,7 @@ export default function ProjectDetailPage() {
         <title>Project Detail | Bangumi GrillMaster</title>
       </Head>
       <section className="space-y-4">
-        <SectionHeading title="影片詳情" />
+        <SectionHeading title="Project Details" />
         {projectQuery.isLoading ? (
           <Card>
             <CardContent className="p-6 text-sm text-zinc-600">

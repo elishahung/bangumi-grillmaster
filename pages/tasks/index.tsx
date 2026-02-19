@@ -38,7 +38,7 @@ export default function TasksPage() {
         <title>Tasks | Bangumi GrillMaster</title>
       </Head>
       <section className="space-y-4">
-        <SectionHeading description="所有處理任務的即時狀態" title="任務歷史" />
+        <SectionHeading description="Real-time status of all processing tasks" title="Task History" />
         {content}
       </section>
     </>

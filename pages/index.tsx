@@ -28,14 +28,14 @@ export default function HomePage() {
               <SubmitProjectDialog />
             </div>
           }
-          title="我的影片"
+          title="My Projects"
         />
 
         {projectsQuery.isLoading ? (
-          <p className="text-sm text-zinc-500">載入中...</p>
+          <p className="text-sm text-zinc-500">Loading...</p>
         ) : (
           <ProjectGrid
-            emptyText="尚未有影片，點擊「+ 新增影片」開始。"
+            emptyText="No projects yet. Click '+ New Project' to start."
             projects={projectsQuery.data ?? []}
           />
         )}
@@ -45,11 +45,11 @@ export default function HomePage() {
             actions={
               <Link href="/tasks">
                 <Button size="sm" variant="ghost">
-                  查看全部
+                  View All
                 </Button>
               </Link>
             }
-            title="最近任務"
+            title="Recent Tasks"
           />
           <TaskList tasks={tasksQuery.data ?? []} />
         </section>

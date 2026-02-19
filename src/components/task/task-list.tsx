@@ -11,7 +11,7 @@ export const TaskList = ({ tasks }: { tasks: TaskRow[] }) => {
     return (
       <Card>
         <CardContent className="p-6 text-sm text-muted-foreground">
-          尚無任務。
+          No tasks found.
         </CardContent>
       </Card>
     );

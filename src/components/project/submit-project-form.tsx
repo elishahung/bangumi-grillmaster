@@ -57,7 +57,7 @@ const SubmitForm = ({
       <FormField
         error={errors.sourceOrUrl?.message}
         htmlFor="sourceOrUrl"
-        label="影片網址 / 影片 ID"
+        label="Video URL / Video ID"
       >
         <Input
           id="sourceOrUrl"
@@ -68,25 +68,25 @@ const SubmitForm = ({
       <FormField
         error={errors.translationHint?.message}
         htmlFor="hint"
-        label="翻譯提示（選填）"
+        label="Translation Hint (Optional)"
       >
         <Textarea
           id="hint"
-          placeholder="節目名稱、集數資訊、術語偏好"
+          placeholder="Program name, episode info, preferred terms"
           {...register('translationHint')}
         />
       </FormField>
       <Button disabled={!isValid || submitMutation.isPending} type="submit">
-        {submitMutation.isPending ? '提交中...' : '開始翻譯'}
+        {submitMutation.isPending ? 'Submitting...' : 'Start Translation'}
       </Button>
       {submitMutation.data ? (
         <div className="space-y-1 text-emerald-700 text-sm">
-          <p>新增成功！</p>
+          <p>Project created successfully!</p>
           <Link
             className="font-medium underline"
             href={`/projects/${submitMutation.data.projectId}`}
           >
-            查看進度
+            View Progress
           </Link>
         </div>
       ) : null}
@@ -109,13 +109,13 @@ export const SubmitProjectDialog = () => {
   return (
     <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger asChild>
-        <Button size="sm">+ 新增影片</Button>
+        <Button size="sm">+ New Project</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>新增翻譯任務</DialogTitle>
+          <DialogTitle>New Translation Task</DialogTitle>
           <DialogDescription>
-            貼上影片網址或影片 ID 以新增字幕翻譯任務
+            Paste video URL or ID to add a new subtitle translation task
           </DialogDescription>
         </DialogHeader>
         <SubmitForm onSuccess={handleSuccess} />

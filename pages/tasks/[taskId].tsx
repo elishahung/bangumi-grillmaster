@@ -74,7 +74,7 @@ export default function TaskDetailPage() {
         <title>Task Detail | Bangumi GrillMaster</title>
       </Head>
       <section className="space-y-4">
-        <SectionHeading title="任務詳情" />
+        <SectionHeading title="Task Details" />
         {content}
       </section>
     </>
