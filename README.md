@@ -111,7 +111,7 @@ OSS_ACCESS_KEY_SECRET=xxx
 
 # Google Gemini (翻譯)
 GEMINI_API_KEY=xxx
-GEMINI_MODEL=gemini-3-pro-preview
+GEMINI_MODEL=gemini-3.1-pro-preview
 
 # 可選
 COOKIES_TXT_PATH=cookies.txt   # 影片來源網站 cookies (供 yt-dlp 使用)

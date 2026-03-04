@@ -75,6 +75,12 @@ class FunASR:
             language_hints=["ja"],
             diarization_enabled=True,
         )
+
+        if task_response.output is None:
+            raise Exception(
+                f"Transcription task failed: {task_response.message}"
+            )
+
         task_id = task_response.output.task_id
         logger.info(f"Transcription task submitted. Task ID: {task_id}")
         return task_id
