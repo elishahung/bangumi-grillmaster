@@ -192,7 +192,10 @@ class Gemini:
             logger.info(
                 f"Response incomplete, requesting continuation (attempt {continuations}/{self.MAX_CONTINUATIONS})"
             )
-            response = chat.send_message(message="繼續")
+            continuation_prompt = self._build_continuation_prompt(
+                translated_content
+            )
+            response = chat.send_message(message=continuation_prompt)
 
             total_cost += calculate_cost(response.usage_metadata)
             translated_content += "\n<BREAK>\n"
@@ -213,6 +216,29 @@ class Gemini:
         return TranslationResult(
             continuations=continuations,
             total_cost=total_cost,
+        )
+
+    @staticmethod
+    def _build_continuation_prompt(translated_so_far: str) -> str:
+        """
+        Build a continuation prompt that includes context about the last
+        translated entry, so the model knows exactly where to resume.
+
+        Args:
+            translated_so_far: All translated content accumulated so far.
+
+        Returns:
+            str: A continuation prompt with positional context.
+        """
+        # Extract the last few SRT blocks as context anchor
+        lines = translated_so_far.rstrip().split("\n")
+        # Take roughly the last 3 SRT blocks (each block is ~3-4 lines)
+        tail_lines = lines[-12:] if len(lines) > 12 else lines
+        tail_text = "\n".join(tail_lines)
+
+        return (
+            f"繼續翻譯。以下是你最後翻譯的幾個字幕區塊，請從下一個條目接續，"
+            f"不要重複以下內容：\n\n```\n{tail_text}\n```"
         )
 
     def make_user_message(
