@@ -1,3 +1,3 @@
-from .gemini import Gemini
+from .gemini import Gemini, TranslationResult
 
-__all__ = ["Gemini"]
+__all__ = ["Gemini", "TranslationResult"]

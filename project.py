@@ -23,7 +23,8 @@ VIDEO_FILE_NAME = "video.mp4"
 AUDIO_FILE_NAME = "audio.opus"
 ASR_FILE_NAME = "asr.json"
 SRT_FILE_NAME = "video.ja.srt"
-TRANSLATED_FILE_NAME = "video.zh-hant.srt"
+TRANSLATED_FILE_NAME = "video.cht.srt"
+PRE_PASS_FILE_NAME = "pre_pass.json"
 
 
 class ProgressStage(str, Enum):
@@ -386,6 +387,15 @@ class Project(BaseModel):
             Path to translated.srt.
         """
         return self.project_path / TRANSLATED_FILE_NAME
+
+    @property
+    def pre_pass_path(self) -> Path:
+        """Get the path to the cached Gemini pre-pass briefing JSON.
+
+        Returns:
+            Path to pre_pass.json.
+        """
+        return self.project_path / PRE_PASS_FILE_NAME
 
 
 # Runtime check enum values match field names

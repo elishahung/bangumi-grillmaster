@@ -147,11 +147,10 @@ def process_project(project_id: str) -> None:
             logger.info(f"Stage: Translating subtitles for {project_id}")
             gemini = Gemini()
             gemini.translate(
-                project.id,
                 project.translation_hint,
                 project.srt_path,
-                project.audio_path,
                 project.translated_path,
+                project.pre_pass_path,
             )
             project.mark_progress(ProgressStage.TRANSLATED)
             logger.success("Stage complete: Translation completed")

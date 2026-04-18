@@ -14,7 +14,7 @@ class Settings(BaseSettings):
         description="Model identifier for ASR (Automatic Speech Recognition) processing",
     )
     gemini_model: str = Field(
-        default="gemini-3.1-pro-preview",
+        default="gemini-3-flash-preview",
         description="Model identifier for translation tasks",
     )
     cookies_txt_path: Path | None = Field(
@@ -46,6 +46,26 @@ class Settings(BaseSettings):
         description="Alibaba Cloud OSS access key secret for authentication"
     )
     gemini_api_key: str = Field(description="API key for Google Gemini service")
+    gemini_chunk_char_limit: int = Field(
+        default=12000,
+        description="Target character count per chunk when splitting SRT for concurrent translation (~10 min of variety show subtitles)",
+    )
+    gemini_concurrency: int = Field(
+        default=5,
+        description="Maximum number of concurrent chunk translation requests to Gemini",
+    )
+    gemini_pre_pass_thinking_level: str = Field(
+        default="HIGH",
+        description="Thinking level for the pre-pass analysis call. One of: LOW, MEDIUM, HIGH",
+    )
+    gemini_chunk_thinking_level: str = Field(
+        default="MEDIUM",
+        description="Thinking level for per-chunk translation calls. One of: LOW, MEDIUM, HIGH",
+    )
+    gemini_chunk_max_retries: int = Field(
+        default=3,
+        description="Maximum retry attempts per chunk on translation failure",
+    )
 
 
 settings = Settings()
