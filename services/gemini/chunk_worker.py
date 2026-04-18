@@ -151,7 +151,9 @@ async def translate_chunk(
                 contents=user_message,
                 config=config,
             )
-            total_cost += calculate_cost(response.usage_metadata)
+            total_cost += calculate_cost(
+                response.usage_metadata, settings.gemini_chunk_model
+            )
 
             finish_reason = (
                 response.candidates[0].finish_reason

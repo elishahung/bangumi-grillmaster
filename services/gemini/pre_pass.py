@@ -116,7 +116,9 @@ async def run_pre_pass(
                 contents=user_message,
                 config=config,
             )
-            cost = calculate_cost(response.usage_metadata)
+            cost = calculate_cost(
+                response.usage_metadata, settings.gemini_pre_pass_model
+            )
             result = PrePassResult.model_validate_json(response.text or "")
             logger.success(
                 f"[pre-pass] Completed: {len(result.characters)} characters, "

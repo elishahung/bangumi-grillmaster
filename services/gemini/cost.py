@@ -12,6 +12,7 @@ class ModelCost(BaseModel):
 
 def calculate_cost(
     usage_metadata: genai.types.GenerateContentResponseUsageMetadata | None,
+    model_name: str,
 ) -> float:
     if usage_metadata is None:
         logger.warning("Usage metadata is None")
@@ -29,7 +30,6 @@ def calculate_cost(
         ),
     }
 
-    model_name = settings.gemini_model
     if model_name not in pricing:
         logger.warning(f"Unknown model: {model_name}")
         return 0.0
