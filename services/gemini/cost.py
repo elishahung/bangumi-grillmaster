@@ -18,6 +18,9 @@ def calculate_cost(
         return 0.0
 
     pricing: dict[str, ModelCost] = {
+        "gemini-3.1-flash-lite-preview": ModelCost(
+            input=0.25, cache_hit=0.025, output=1.50
+        ),
         "gemini-3-flash-preview": ModelCost(
             input=0.50, cache_hit=0.10, output=3.00
         ),

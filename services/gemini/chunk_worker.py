@@ -100,8 +100,12 @@ async def translate_chunk(
     Retries up to gemini_chunk_max_retries. Raises RuntimeError if all attempts
     exhaust.
     """
-    user_message = _build_user_message(chunk, chunk_index, total_chunks, pre_pass)
-    thinking_level = genai.types.ThinkingLevel[settings.gemini_chunk_thinking_level]
+    user_message = _build_user_message(
+        chunk, chunk_index, total_chunks, pre_pass
+    )
+    thinking_level = genai.types.ThinkingLevel[
+        settings.gemini_chunk_thinking_level
+    ]
 
     config = genai.types.GenerateContentConfig(
         system_instruction=chunk_instruction,
@@ -123,7 +127,9 @@ async def translate_chunk(
                 threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
             ),
         ],
-        thinking_config=genai.types.ThinkingConfig(thinking_level=thinking_level),
+        thinking_config=genai.types.ThinkingConfig(
+            thinking_level=thinking_level
+        ),
     )
 
     prefix = f"[chunk {chunk_index + 1}/{total_chunks}]"
@@ -141,14 +147,16 @@ async def translate_chunk(
                 f"({len(chunk)} blocks, attempt {attempt}/{max_retries})"
             )
             response = await client.aio.models.generate_content(
-                model=settings.gemini_model,
+                model=settings.gemini_chunk_model,
                 contents=user_message,
                 config=config,
             )
             total_cost += calculate_cost(response.usage_metadata)
 
             finish_reason = (
-                response.candidates[0].finish_reason if response.candidates else None
+                response.candidates[0].finish_reason
+                if response.candidates
+                else None
             )
             if finish_reason != genai.types.FinishReason.STOP:
                 raise RuntimeError(

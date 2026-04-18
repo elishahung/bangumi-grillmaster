@@ -13,8 +13,12 @@ class Settings(BaseSettings):
         default="fun-asr",
         description="Model identifier for ASR (Automatic Speech Recognition) processing",
     )
-    gemini_model: str = Field(
+    gemini_pre_pass_model: str = Field(
         default="gemini-3-flash-preview",
+        description="Model identifier for translation tasks",
+    )
+    gemini_chunk_model: str = Field(
+        default="gemini-3.1-flash-lite-preview",
         description="Model identifier for translation tasks",
     )
     cookies_txt_path: Path | None = Field(
@@ -59,7 +63,7 @@ class Settings(BaseSettings):
         description="Thinking level for the pre-pass analysis call. One of: LOW, MEDIUM, HIGH",
     )
     gemini_chunk_thinking_level: str = Field(
-        default="MEDIUM",
+        default="HIGH",
         description="Thinking level for per-chunk translation calls. One of: LOW, MEDIUM, HIGH",
     )
     gemini_chunk_max_retries: int = Field(

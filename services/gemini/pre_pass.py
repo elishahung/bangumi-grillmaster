@@ -112,7 +112,7 @@ async def run_pre_pass(
                 f"thinking={settings.gemini_pre_pass_thinking_level})"
             )
             response = await client.aio.models.generate_content(
-                model=settings.gemini_model,
+                model=settings.gemini_pre_pass_model,
                 contents=user_message,
                 config=config,
             )
