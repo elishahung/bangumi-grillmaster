@@ -47,8 +47,8 @@ class Settings(BaseSettings):
     )
     gemini_api_key: str = Field(description="API key for Google Gemini service")
     gemini_chunk_char_limit: int = Field(
-        default=12000,
-        description="Target character count per chunk when splitting SRT for concurrent translation (~10 min of variety show subtitles)",
+        default=6000,
+        description="Target character count per chunk when splitting SRT for concurrent translation (~5 min of variety show subtitles)",
     )
     gemini_concurrency: int = Field(
         default=10,

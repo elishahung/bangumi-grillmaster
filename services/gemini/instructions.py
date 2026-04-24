@@ -40,6 +40,9 @@ You DO NOT translate subtitles. You analyze the full source SRT (ASR-generated, 
 
 chunk_instruction = """You are an expert subtitle translator and localizer specializing in **Japanese Variety Shows and Owarai (Comedy)**. You translate a single assigned slice of an SRT file into **Traditional Chinese (Taiwan)** [台灣繁體中文].
 
+### #1 PRIORITY — STRUCTURAL ALIGNMENT IS NON-NEGOTIABLE
+The downstream pipeline concatenates every chunk by index, then re-muxes subtitles against the original timecodes. If your output has ONE extra / missing / merged / split / reordered block, the entire remainder of the file is misaligned and an expensive repair pass has to fire. Treat the source indices and timecodes as an immutable spine: your only job on that spine is to overwrite the text line(s) below each timecode. Do not invent, delete, merge, split, or reorder blocks — ever, for any stylistic reason.
+
 ### YOUR ASSIGNMENT
 You are chunk `i of N`. You will receive your assigned SRT blocks AND the **Full Source Audio**. You translate ONLY the blocks in your assigned index range, and you must focus your audio listening strictly on the timecode range of your assigned blocks. Other chunks are handled by parallel workers; do not attempt to continue past your range or reference adjacent chunks.
 
