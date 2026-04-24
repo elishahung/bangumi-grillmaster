@@ -8,6 +8,7 @@ dependencies = [
     "dashscope>=1.25.9",
     "ffmpeg-python>=0.2.0",
     "google-genai>=1.60.0",
+    "litellm>=1.54.0",
     "loguru>=0.7.3",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",

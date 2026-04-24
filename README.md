@@ -122,8 +122,7 @@ GEMINI_MODEL=gemini-3-flash-preview
 # 可選：Gemini 翻譯調校
 GEMINI_CHUNK_CHAR_LIMIT=12000          # 每塊目標字元數 (約 10 分鐘字幕)
 GEMINI_CONCURRENCY=10                  # chunk 併發上限
-GEMINI_PRE_PASS_THINKING_LEVEL=HIGH    # pre-pass thinking level: LOW/MEDIUM/HIGH
-GEMINI_CHUNK_THINKING_LEVEL=MEDIUM     # 每塊翻譯的 thinking level
+GEMINI_THINKING_LEVEL=HIGH             # 翻譯 thinking level: LOW/MEDIUM/HIGH
 GEMINI_CHUNK_MAX_RETRIES=3             # 單塊失敗重試次數 (pre-pass 也共用)
 
 # 可選

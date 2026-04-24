@@ -73,9 +73,7 @@ async def run_pre_pass(
     Raises the last exception if all retries exhaust.
     """
     user_message = _build_user_message(video_description, srt_text, chunks)
-    thinking_level = genai.types.ThinkingLevel[
-        settings.gemini_pre_pass_thinking_level
-    ]
+    thinking_level = genai.types.ThinkingLevel[settings.gemini_thinking_level]
 
     config = genai.types.GenerateContentConfig(
         system_instruction=pre_pass_instruction,
@@ -110,7 +108,7 @@ async def run_pre_pass(
         try:
             logger.info(
                 f"[pre-pass] Requesting analysis (attempt {attempt}/{max_retries}, "
-                f"thinking={settings.gemini_pre_pass_thinking_level})"
+                f"thinking={settings.gemini_thinking_level})"
             )
             response = await client.aio.models.generate_content(
                 model=settings.gemini_model,

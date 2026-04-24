@@ -54,21 +54,25 @@ class Settings(BaseSettings):
         default=10,
         description="Maximum number of concurrent chunk translation requests to Gemini",
     )
-    gemini_pre_pass_thinking_level: str = Field(
+    gemini_thinking_level: str = Field(
         default="HIGH",
-        description="Thinking level for the pre-pass analysis call. One of: LOW, MEDIUM, HIGH",
-    )
-    gemini_chunk_thinking_level: str = Field(
-        default="HIGH",
-        description="Thinking level for per-chunk translation calls. One of: LOW, MEDIUM, HIGH",
+        description="Thinking level for translation calls. One of: LOW, MEDIUM, HIGH",
     )
     gemini_chunk_max_retries: int = Field(
         default=3,
         description="Maximum retry attempts per chunk on translation failure",
     )
-    gemini_fix_model: str = Field(
-        default="gemini-3.1-flash-lite-preview",
-        description="Model used to repair chunk outputs that fail structural validation (index/timecode mismatch) before falling back to a full chunk retry",
+
+    llm_api_key: str = Field(
+        description="API key forwarded to litellm for non-Gemini LLM calls (e.g., OpenRouter for the chunk-fix model)"
+    )
+    llm_chunk_fix_model: str = Field(
+        default="openrouter/deepseek/deepseek-v4-flash",
+        description="litellm model string used to repair chunk outputs that fail structural validation before falling back to a full chunk retry",
+    )
+    llm_chunk_fix_max_retries: int = Field(
+        default=3,
+        description="Maximum retry attempts for the structural fix layer per broken chunk output",
     )
 
 
