@@ -1,6 +1,7 @@
 """Gemini translation orchestrator: pre-pass + concurrent chunked translation."""
 
 import asyncio
+import shutil
 import time
 from pathlib import Path
 
@@ -46,16 +47,25 @@ class Gemini:
         srt_path: Path,
         output_path: Path,
         pre_pass_path: Path,
+        chunks_cache_dir: Path,
     ) -> TranslationResult:
         """Translate an SRT file to Traditional Chinese. Blocks until complete.
 
         The pre-pass briefing is cached at pre_pass_path. If the file exists,
         the cached briefing is reused (skipping the pre-pass API call); this
         makes re-runs cheap when an earlier chunk translation failed.
+
+        Per-chunk translations are cached in chunks_cache_dir during the run so
+        that re-runs can skip chunks that already succeeded. The whole cache
+        directory is deleted after the full translation completes.
         """
         return asyncio.run(
             self._translate_async(
-                video_description, srt_path, output_path, pre_pass_path
+                video_description,
+                srt_path,
+                output_path,
+                pre_pass_path,
+                chunks_cache_dir,
             )
         )
 
@@ -65,6 +75,7 @@ class Gemini:
         srt_path: Path,
         output_path: Path,
         pre_pass_path: Path,
+        chunks_cache_dir: Path,
     ) -> TranslationResult:
         start_time = time.time()
         logger.info(f"Starting translation for SRT file: {srt_path}")
@@ -104,12 +115,18 @@ class Gemini:
             )
             logger.info(f"[pre-pass] Saved briefing to {pre_pass_path}")
 
+        chunks_cache_dir.mkdir(parents=True, exist_ok=True)
         semaphore = asyncio.Semaphore(settings.gemini_concurrency)
 
         async def bounded(i: int, chunk: list[SrtBlock]):
             async with semaphore:
                 return await translate_chunk(
-                    self.client, chunk, i, len(chunks), pre_pass_result
+                    self.client,
+                    chunk,
+                    i,
+                    len(chunks),
+                    pre_pass_result,
+                    chunks_cache_dir,
                 )
 
         chunk_results = await asyncio.gather(
@@ -132,6 +149,16 @@ class Gemini:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(serialize_srt(all_blocks), encoding="utf-8")
         logger.success(f"Translation saved to: {output_path}")
+
+        # One-shot chunk cache is only useful until the run succeeds; wipe it
+        # so re-runs of a subsequent (new) translation don't inherit stale files.
+        try:
+            shutil.rmtree(chunks_cache_dir)
+            logger.debug(f"Cleaned up chunk cache dir: {chunks_cache_dir}")
+        except OSError as e:
+            logger.warning(
+                f"Failed to remove chunk cache dir {chunks_cache_dir}: {e}"
+            )
 
         chunk_costs = [r.cost for r in chunk_results]
         total_retries = sum(r.retries for r in chunk_results)

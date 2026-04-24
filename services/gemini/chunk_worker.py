@@ -1,7 +1,10 @@
 """Translate a single SRT chunk concurrently. Strict index/timecode validation on output."""
 
 import asyncio
+import hashlib
 import json
+from pathlib import Path
+
 from google import genai
 from loguru import logger
 from pydantic import BaseModel
@@ -17,6 +20,18 @@ class ChunkTranslationResult(BaseModel):
     blocks: list[SrtBlock]
     cost: float
     retries: int
+
+
+def _cache_path(
+    cache_dir: Path, from_index: int, to_index: int, user_message: str
+) -> Path:
+    """Build the per-chunk cache file path.
+
+    Hash covers the full user_message (pre-pass briefing + SRT slice + chunk
+    position), so any upstream change invalidates the cache automatically.
+    """
+    digest = hashlib.sha256(user_message.encode("utf-8")).hexdigest()[:8]
+    return cache_dir / f"chunk_{from_index:04d}-{to_index:04d}_{digest}.srt"
 
 
 def _find_segment_summary(
@@ -94,11 +109,16 @@ async def translate_chunk(
     chunk_index: int,
     total_chunks: int,
     pre_pass: PrePassResult,
+    cache_dir: Path,
 ) -> ChunkTranslationResult:
     """Translate one chunk with retry on MAX_TOKENS, API errors, or validation failure.
 
     Retries up to gemini_chunk_max_retries. Raises RuntimeError if all attempts
     exhaust.
+
+    Cache hit (matching filename under cache_dir) short-circuits the API call
+    and returns cost=0, retries=0. Cache miss or corrupt cache falls through
+    to the live call; a successful translation is written back to the cache.
     """
     user_message = _build_user_message(
         chunk, chunk_index, total_chunks, pre_pass
@@ -106,6 +126,29 @@ async def translate_chunk(
     thinking_level = genai.types.ThinkingLevel[
         settings.gemini_chunk_thinking_level
     ]
+
+    prefix = f"[chunk {chunk_index + 1}/{total_chunks}]"
+    from_index = chunk[0].index
+    to_index = chunk[-1].index
+    cache_file = _cache_path(cache_dir, from_index, to_index, user_message)
+
+    if cache_file.exists():
+        try:
+            cached_blocks = _validate_output(
+                chunk, cache_file.read_text(encoding="utf-8")
+            )
+            logger.info(
+                f"{prefix} Cache hit: loaded {len(cached_blocks)} blocks "
+                f"from {cache_file.name}"
+            )
+            return ChunkTranslationResult(
+                blocks=cached_blocks, cost=0.0, retries=0
+            )
+        except (OSError, ValueError) as e:
+            logger.warning(
+                f"{prefix} Cache file {cache_file.name} unusable ({e}); "
+                f"falling back to API call"
+            )
 
     config = genai.types.GenerateContentConfig(
         system_instruction=chunk_instruction,
@@ -132,11 +175,7 @@ async def translate_chunk(
         ),
     )
 
-    prefix = f"[chunk {chunk_index + 1}/{total_chunks}]"
-    from_index = chunk[0].index
-    to_index = chunk[-1].index
     max_retries = settings.gemini_chunk_max_retries
-
     total_cost = 0.0
     last_error: Exception | None = None
 
@@ -165,7 +204,14 @@ async def translate_chunk(
                     f"Non-STOP finish reason: {finish_reason} (likely MAX_TOKENS)"
                 )
 
-            blocks = _validate_output(chunk, response.text or "")
+            output_text = response.text or ""
+            blocks = _validate_output(chunk, output_text)
+            try:
+                cache_file.write_text(output_text, encoding="utf-8")
+            except OSError as e:
+                logger.warning(
+                    f"{prefix} Failed to write cache {cache_file.name}: {e}"
+                )
             logger.success(
                 f"{prefix} Completed {len(blocks)} blocks "
                 f"(${total_cost:.4f}, retries={attempt - 1})"

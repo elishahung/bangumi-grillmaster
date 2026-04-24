@@ -151,6 +151,7 @@ def process_project(project_id: str) -> None:
                 project.srt_path,
                 project.translated_path,
                 project.pre_pass_path,
+                project.chunks_cache_dir,
             )
             project.mark_progress(ProgressStage.TRANSLATED)
             logger.success("Stage complete: Translation completed")

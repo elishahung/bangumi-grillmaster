@@ -25,6 +25,7 @@ ASR_FILE_NAME = "asr.json"
 SRT_FILE_NAME = "video.ja.srt"
 TRANSLATED_FILE_NAME = "video.cht.srt"
 PRE_PASS_FILE_NAME = "pre_pass.json"
+CHUNKS_CACHE_DIR_NAME = "chunks"
 
 
 class ProgressStage(str, Enum):
@@ -396,6 +397,16 @@ class Project(BaseModel):
             Path to pre_pass.json.
         """
         return self.project_path / PRE_PASS_FILE_NAME
+
+    @property
+    def chunks_cache_dir(self) -> Path:
+        """Get the directory for one-shot per-chunk translation caches.
+
+        This directory is wiped after a successful full translation; it only
+        exists to let re-runs skip chunks that already succeeded on a prior
+        failed attempt.
+        """
+        return self.project_path / CHUNKS_CACHE_DIR_NAME
 
 
 # Runtime check enum values match field names
