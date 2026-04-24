@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from settings import settings
 from .chunker import SrtBlock, parse_srt
 from .cost import calculate_cost
-from .instructions import chunk_instruction
+from .instructions import chunk_fix_instruction, chunk_instruction
 from .pre_pass import PrePassResult, SegmentSummary
 
 
@@ -78,6 +78,75 @@ def _build_user_message(
     )
 
 
+def _build_fix_user_message(
+    chunk: list[SrtBlock], broken_output: str, error: str
+) -> str:
+    """Compose repair-call user message: validation error + source SRT + broken output."""
+    source_srt = "\n\n".join(b.raw for b in chunk)
+    return (
+        "下游譯者輸出的 SRT 結構與來源不符，請在不改動譯文內容的前提下修復對位。\n\n"
+        f"【驗證錯誤】\n{error}\n\n"
+        f"【來源 SRT（權威 index/timecode）】\n---\n{source_srt}\n---\n\n"
+        f"【待修復的翻譯 SRT】\n---\n{broken_output}\n---"
+    )
+
+
+async def _fix_chunk_output(
+    client: genai.Client,
+    chunk: list[SrtBlock],
+    broken_output: str,
+    error: str,
+    prefix: str,
+) -> tuple[str, float]:
+    """Single structural-repair call using the cheaper fix model.
+
+    No audio, no retries, LOW thinking. Returns (repaired_text, cost). Raises
+    on API error or non-STOP finish reason.
+    """
+    config = genai.types.GenerateContentConfig(
+        system_instruction=chunk_fix_instruction,
+        safety_settings=[
+            genai.types.SafetySetting(
+                category=genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            genai.types.SafetySetting(
+                category=genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            genai.types.SafetySetting(
+                category=genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            genai.types.SafetySetting(
+                category=genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+        ],
+        thinking_config=genai.types.ThinkingConfig(
+            thinking_level=genai.types.ThinkingLevel.LOW
+        ),
+    )
+    user_message = _build_fix_user_message(chunk, broken_output, error)
+    logger.info(
+        f"{prefix} Attempting structural fix via {settings.gemini_fix_model}"
+    )
+    response = await client.aio.models.generate_content(
+        model=settings.gemini_fix_model,
+        contents=[user_message],
+        config=config,
+    )
+    cost = calculate_cost(response.usage_metadata, settings.gemini_fix_model)
+    finish_reason = (
+        response.candidates[0].finish_reason if response.candidates else None
+    )
+    if finish_reason != genai.types.FinishReason.STOP:
+        raise RuntimeError(
+            f"Fix non-STOP finish reason: {finish_reason} (likely MAX_TOKENS)"
+        )
+    return response.text or "", cost
+
+
 def _validate_output(
     expected: list[SrtBlock], output_text: str
 ) -> list[SrtBlock]:
@@ -105,6 +174,7 @@ def _validate_output(
 
 async def translate_chunk(
     client: genai.Client,
+    audio_file: genai.types.File,
     chunk: list[SrtBlock],
     chunk_index: int,
     total_chunks: int,
@@ -186,12 +256,12 @@ async def translate_chunk(
                 f"({len(chunk)} blocks, attempt {attempt}/{max_retries})"
             )
             response = await client.aio.models.generate_content(
-                model=settings.gemini_chunk_model,
-                contents=user_message,
+                model=settings.gemini_model,
+                contents=[audio_file, user_message],
                 config=config,
             )
             total_cost += calculate_cost(
-                response.usage_metadata, settings.gemini_chunk_model
+                response.usage_metadata, settings.gemini_model
             )
 
             finish_reason = (
@@ -205,7 +275,30 @@ async def translate_chunk(
                 )
 
             output_text = response.text or ""
-            blocks = _validate_output(chunk, output_text)
+            try:
+                blocks = _validate_output(chunk, output_text)
+            except ValueError as validation_error:
+                logger.warning(
+                    f"{prefix} Validation failed on attempt {attempt}: "
+                    f"{validation_error}. Trying fix layer."
+                )
+                try:
+                    fixed_text, fix_cost = await _fix_chunk_output(
+                        client,
+                        chunk,
+                        output_text,
+                        str(validation_error),
+                        prefix,
+                    )
+                    total_cost += fix_cost
+                    blocks = _validate_output(chunk, fixed_text)
+                    output_text = fixed_text
+                    logger.success(f"{prefix} Fix layer succeeded")
+                except Exception as fix_error:
+                    raise RuntimeError(
+                        f"Fix layer failed ({fix_error}); "
+                        f"original: {validation_error}"
+                    ) from fix_error
             try:
                 cache_file.write_text(output_text, encoding="utf-8")
             except OSError as e:

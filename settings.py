@@ -13,12 +13,8 @@ class Settings(BaseSettings):
         default="fun-asr",
         description="Model identifier for ASR (Automatic Speech Recognition) processing",
     )
-    gemini_pre_pass_model: str = Field(
+    gemini_model: str = Field(
         default="gemini-3-flash-preview",
-        description="Model identifier for translation tasks",
-    )
-    gemini_chunk_model: str = Field(
-        default="gemini-3.1-flash-lite-preview",
         description="Model identifier for translation tasks",
     )
     cookies_txt_path: Path | None = Field(
@@ -55,7 +51,7 @@ class Settings(BaseSettings):
         description="Target character count per chunk when splitting SRT for concurrent translation (~10 min of variety show subtitles)",
     )
     gemini_concurrency: int = Field(
-        default=5,
+        default=10,
         description="Maximum number of concurrent chunk translation requests to Gemini",
     )
     gemini_pre_pass_thinking_level: str = Field(
@@ -69,6 +65,10 @@ class Settings(BaseSettings):
     gemini_chunk_max_retries: int = Field(
         default=3,
         description="Maximum retry attempts per chunk on translation failure",
+    )
+    gemini_fix_model: str = Field(
+        default="gemini-3.1-flash-lite-preview",
+        description="Model used to repair chunk outputs that fail structural validation (index/timecode mismatch) before falling back to a full chunk retry",
     )
 
 

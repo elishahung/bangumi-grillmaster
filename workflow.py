@@ -149,6 +149,8 @@ def process_project(project_id: str) -> None:
             gemini.translate(
                 project.translation_hint,
                 project.srt_path,
+                project_id,
+                project.audio_path,
                 project.translated_path,
                 project.pre_pass_path,
                 project.chunks_cache_dir,

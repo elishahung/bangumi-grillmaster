@@ -20,11 +20,15 @@
 
 使用 Gemini 進行**兩階段併發翻譯**：
 
-1. **Pre-pass**：完整 SRT + 節目資訊一次丟給 AI，要求輸出結構化 JSON 簡報（人物對照、專有名詞/ASR 修正 dict、梗的固定譯法、整體語氣、每段局部摘要）
-2. **併發翻譯**：SRT 按字元數平均切塊（block 邊界對齊），每塊配上 pre-pass 簡報 + 自己的局部摘要，平行送出翻譯
+1. **Pre-pass**：完整 SRT + 節目資訊 + 音檔，要求輸出結構化 JSON 簡報（人物對照、專有名詞/ASR 修正 dict、梗的固定譯法、整體語氣、每段局部摘要）
+2. **併發翻譯**：SRT 按字元數平均切塊（block 邊界對齊），每塊配上 pre-pass 簡報 + 自己的局部摘要 + 音檔，平行送出翻譯
 3. **組裝**：每塊輸出驗證 index/timecode 連續性，再拼接寫檔
 
-好處：速度快（併發）、用量更便宜（輸出切分，便宜的 Flash 模型也能穩住品質）、一致性靠 pre-pass glossary 統一。Pre-pass 結果會存在 `projects/{id}/pre_pass.json`，chunk 翻譯失敗 re-run 時不重跑。
+**新增**：`services/gemini/storage.py`（音檔上傳至 Gemini File API；有同名遠端檔則略過上傳）。pre-pass 與每段 chunk 皆帶音檔與文字。
+
+**更動**：翻譯只保留 `GEMINI_MODEL` 一項（併用於 pre-pass 與 chunk；舊的 pre-pass／chunk 分開模型已移除）。預設 `GEMINI_CONCURRENCY` 改為 10。
+
+`pre_pass.json` 可沿用；只重跑 chunk 時不會重跑 pre-pass。
 
 ## 流程
 
@@ -117,7 +121,7 @@ GEMINI_MODEL=gemini-3-flash-preview
 
 # 可選：Gemini 翻譯調校
 GEMINI_CHUNK_CHAR_LIMIT=12000          # 每塊目標字元數 (約 10 分鐘字幕)
-GEMINI_CONCURRENCY=5                   # chunk 併發上限
+GEMINI_CONCURRENCY=10                  # chunk 併發上限
 GEMINI_PRE_PASS_THINKING_LEVEL=HIGH    # pre-pass thinking level: LOW/MEDIUM/HIGH
 GEMINI_CHUNK_THINKING_LEVEL=MEDIUM     # 每塊翻譯的 thinking level
 GEMINI_CHUNK_MAX_RETRIES=3             # 單塊失敗重試次數 (pre-pass 也共用)

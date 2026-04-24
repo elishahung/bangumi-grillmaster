@@ -64,6 +64,7 @@ async def run_pre_pass(
     client: genai.Client,
     video_description: str | None,
     srt_text: str,
+    audio_file: genai.types.File,
     chunks: list[list[SrtBlock]],
 ) -> tuple[PrePassResult, float]:
     """Run the single pre-pass call. Returns (parsed result, cost in USD).
@@ -112,12 +113,12 @@ async def run_pre_pass(
                 f"thinking={settings.gemini_pre_pass_thinking_level})"
             )
             response = await client.aio.models.generate_content(
-                model=settings.gemini_pre_pass_model,
-                contents=user_message,
+                model=settings.gemini_model,
+                contents=[audio_file, user_message],
                 config=config,
             )
             cost = calculate_cost(
-                response.usage_metadata, settings.gemini_pre_pass_model
+                response.usage_metadata, settings.gemini_model
             )
             result = PrePassResult.model_validate_json(response.text or "")
             logger.success(

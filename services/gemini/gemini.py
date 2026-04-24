@@ -13,6 +13,7 @@ from settings import settings
 from .chunk_worker import translate_chunk
 from .chunker import SrtBlock, parse_srt, serialize_srt, split_into_chunks
 from .pre_pass import PrePassResult, run_pre_pass
+from .storage import GeminiStorage
 
 
 class TranslationResult(BaseModel):
@@ -35,6 +36,7 @@ class Gemini:
     def __init__(self):
         logger.debug("Initializing Gemini client")
         self.client = genai.Client(api_key=settings.gemini_api_key)
+        self.storage = GeminiStorage(self.client)
         logger.info(
             f"Gemini client initialized "
             f"(concurrency={settings.gemini_concurrency}, "
@@ -45,6 +47,8 @@ class Gemini:
         self,
         video_description: str | None,
         srt_path: Path,
+        audio_key: str,
+        audio_path: Path,
         output_path: Path,
         pre_pass_path: Path,
         chunks_cache_dir: Path,
@@ -63,6 +67,8 @@ class Gemini:
             self._translate_async(
                 video_description,
                 srt_path,
+                audio_key,
+                audio_path,
                 output_path,
                 pre_pass_path,
                 chunks_cache_dir,
@@ -73,6 +79,8 @@ class Gemini:
         self,
         video_description: str | None,
         srt_path: Path,
+        audio_key: str,
+        audio_path: Path,
         output_path: Path,
         pre_pass_path: Path,
         chunks_cache_dir: Path,
@@ -81,6 +89,7 @@ class Gemini:
         logger.info(f"Starting translation for SRT file: {srt_path}")
 
         srt_text = srt_path.read_text(encoding="utf-8")
+        audio_file = self.storage.ensure_file(audio_key, audio_path)
         blocks = parse_srt(srt_text)
         logger.info(f"Parsed {len(blocks)} SRT blocks")
 
@@ -106,7 +115,11 @@ class Gemini:
             pre_pass_cost = 0.0
         else:
             pre_pass_result, pre_pass_cost = await run_pre_pass(
-                self.client, video_description, srt_text, chunks
+                self.client,
+                video_description,
+                srt_text,
+                audio_file,
+                chunks,
             )
             pre_pass_path.parent.mkdir(parents=True, exist_ok=True)
             pre_pass_path.write_text(
@@ -122,6 +135,7 @@ class Gemini:
             async with semaphore:
                 return await translate_chunk(
                     self.client,
+                    audio_file,
                     chunk,
                     i,
                     len(chunks),
