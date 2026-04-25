@@ -11,6 +11,7 @@ from litellm import acompletion, completion_cost
 from loguru import logger
 
 from settings import settings
+from services.gemini.errors import ChunkFixError
 from .instructions import chunk_fix_instruction
 
 LITELLM_TIMEOUT_SECONDS = 6 * 60
@@ -112,6 +113,7 @@ async def fix_chunk_structure(
         if attempt < max_retries:
             await asyncio.sleep(2 ** (attempt - 1))
 
-    raise RuntimeError(
-        f"Fix layer exhausted {max_retries} attempts; last error: {last_exception}"
+    raise ChunkFixError(
+        f"Fix layer exhausted {max_retries} attempts; last error: {last_exception}",
+        accumulated_cost=total_cost,
     ) from last_exception

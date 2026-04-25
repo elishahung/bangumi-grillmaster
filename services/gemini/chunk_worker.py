@@ -13,6 +13,7 @@ from services.llm.chunk_fix import fix_chunk_structure
 from .assets import ChunkMediaAssets
 from .chunker import SrtBlock, parse_srt
 from .cost import calculate_cost
+from .errors import ChunkFixError, ChunkTranslationError
 from .instructions import chunk_instruction
 from .pre_pass import PrePassResult, SegmentSummary
 from .storage import GeminiFileRef, GeminiStorage
@@ -22,6 +23,8 @@ class ChunkTranslationResult(BaseModel):
     blocks: list[SrtBlock]
     cost: float
     retries: int
+    from_index: int
+    to_index: int
 
 
 def _raw_cache_path(
@@ -316,9 +319,15 @@ async def translate_chunk(
 
         if raw_text is None:
             logger.error(f"{prefix} All {max_retries} attempts failed")
-            raise RuntimeError(
+            raise ChunkTranslationError(
                 f"Chunk {chunk_index + 1}/{total_chunks} failed after "
-                f"{max_retries} attempts"
+                f"{max_retries} attempts",
+                accumulated_cost=api_cost,
+                retries=max_retries - 1,
+                chunk_index=chunk_index,
+                total_chunks=total_chunks,
+                from_index=from_index,
+                to_index=to_index,
             ) from last_error
 
         try:
@@ -341,7 +350,11 @@ async def translate_chunk(
                 f"{fixed_path.name}"
             )
             return ChunkTranslationResult(
-                blocks=blocks, cost=api_cost, retries=retries
+                blocks=blocks,
+                cost=api_cost,
+                retries=retries,
+                from_index=from_index,
+                to_index=to_index,
             )
         except (OSError, ValueError) as e:
             logger.warning(
@@ -362,7 +375,11 @@ async def translate_chunk(
             f"(${api_cost:.4f}, retries={retries})"
         )
         return ChunkTranslationResult(
-            blocks=blocks, cost=api_cost, retries=retries
+            blocks=blocks,
+            cost=api_cost,
+            retries=retries,
+            from_index=from_index,
+            to_index=to_index,
         )
 
     def _validate(text: str) -> None:
@@ -373,8 +390,19 @@ async def translate_chunk(
             source_srt, raw_text, error_str, _validate, prefix
         )
     except Exception as fix_error:
-        raise RuntimeError(
-            f"Fix layer failed ({fix_error}); original: {error_str}"
+        fix_cost = (
+            fix_error.accumulated_cost
+            if isinstance(fix_error, ChunkFixError)
+            else 0.0
+        )
+        raise ChunkTranslationError(
+            f"Fix layer failed ({fix_error}); original: {error_str}",
+            accumulated_cost=api_cost + fix_cost,
+            retries=retries,
+            chunk_index=chunk_index,
+            total_chunks=total_chunks,
+            from_index=from_index,
+            to_index=to_index,
         ) from fix_error
 
     blocks = _validate_output(chunk, fixed_text)
@@ -394,5 +422,9 @@ async def translate_chunk(
         f"(${total_cost:.4f}, retries={retries})"
     )
     return ChunkTranslationResult(
-        blocks=blocks, cost=total_cost, retries=retries
+        blocks=blocks,
+        cost=total_cost,
+        retries=retries,
+        from_index=from_index,
+        to_index=to_index,
     )

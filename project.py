@@ -79,6 +79,8 @@ class Project(BaseModel):
     name: str = Field(default="video")
     translation_hint: str | None = None
     asr_task_id: str | None = None
+    total_cost: float = 0.0
+    service_costs: dict[str, float] = Field(default_factory=dict)
 
     # Progress
     is_metadata_fetched: bool = False
@@ -233,6 +235,26 @@ class Project(BaseModel):
         field_name = stage.value
         logger.info(f"Project {self.id}: Marking stage complete - {stage.name}")
         setattr(self, field_name, True)
+        self.save()
+
+    def add_cost(self, service: str, amount: float) -> None:
+        """Accumulate non-negative API cost for a service and persist it."""
+        if amount < 0:
+            raise ValueError("Cost amount must be non-negative")
+        if not service:
+            raise ValueError("Service name must not be empty")
+        if amount == 0:
+            return
+
+        self.total_cost += amount
+        self.service_costs[service] = (
+            self.service_costs.get(service, 0.0) + amount
+        )
+        logger.info(
+            f"Project {self.id}: Added ${amount:.4f} to {service} "
+            f"(service total ${self.service_costs[service]:.4f}, "
+            f"project total ${self.total_cost:.4f})"
+        )
         self.save()
 
     def archive(self) -> None:

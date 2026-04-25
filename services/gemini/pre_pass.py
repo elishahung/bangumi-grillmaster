@@ -12,6 +12,7 @@ from settings import settings
 from .assets import prepare_pre_pass_media_assets
 from .chunker import SrtBlock
 from .cost import calculate_cost
+from .errors import PrePassError
 from .instructions import pre_pass_instruction
 from .storage import GeminiFileRef, GeminiStorage
 
@@ -156,6 +157,7 @@ async def run_pre_pass(
 
     max_retries = settings.gemini_chunk_max_retries
     last_error: Exception | None = None
+    total_cost = 0.0
     for attempt in range(1, max_retries + 1):
         try:
             frame_files = storage.ensure_files(
@@ -184,6 +186,7 @@ async def run_pre_pass(
             cost = calculate_cost(
                 response.usage_metadata, settings.gemini_model
             )
+            total_cost += cost
             result = PrePassResult.model_validate_json(response.text or "")
             pre_pass_path.parent.mkdir(parents=True, exist_ok=True)
             pre_pass_path.write_text(
@@ -221,7 +224,7 @@ async def run_pre_pass(
                 f"{len(result.catchphrases)} catchphrases, "
                 f"{len(result.segment_summaries)} segment_summaries (${cost:.4f})"
             )
-            return result, cost
+            return result, total_cost
         except Exception as e:
             last_error = e
             logger.warning(f"[pre-pass] Attempt {attempt} failed: {e}")
@@ -230,6 +233,7 @@ async def run_pre_pass(
                 await asyncio.sleep(backoff)
 
     logger.error(f"[pre-pass] All {max_retries} attempts failed")
-    raise RuntimeError(
-        f"Pre-pass failed after {max_retries} attempts"
+    raise PrePassError(
+        f"Pre-pass failed after {max_retries} attempts",
+        accumulated_cost=total_cost,
     ) from last_error

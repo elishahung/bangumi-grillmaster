@@ -5,12 +5,12 @@ of the video captioning workflow, from fetching metadata to translation.
 """
 
 from project import Project, ProgressStage, VideoSource
-from services.media import MediaProcessor
-from services.fun_asr import FunASR
-from services.gemini import Gemini
-from services.ytdlp import download_video, get_video_info
 from loguru import logger
 from settings import settings
+from services.fun_asr import FunASR
+from services.gemini import Gemini, GeminiTranslationError
+from services.media import MediaProcessor
+from services.ytdlp import download_video, get_video_info
 
 
 def submit_project(
@@ -65,6 +65,7 @@ def process_project(project_id: str) -> None:
     logger.info(f"Starting project processing: {project_id}")
     try:
         project = Project.from_source_str(project_id)
+        translation_result = None
 
         # Fetch metadata
         if not project.is_metadata_fetched:
@@ -146,17 +147,31 @@ def process_project(project_id: str) -> None:
         if not project.is_translated:
             logger.info(f"Stage: Translating subtitles for {project_id}")
             gemini = Gemini()
-            gemini.translate(
-                project.translation_hint,
-                project.srt_path,
-                project_id,
-                project.video_path,
-                project.audio_path,
-                project.translated_path,
-                project.pre_pass_path,
-                project.pre_pass_cache_dir,
-                project.chunks_cache_dir,
-            )
+            try:
+                translation_result = gemini.translate(
+                    project.translation_hint,
+                    project.srt_path,
+                    project_id,
+                    project.video_path,
+                    project.audio_path,
+                    project.translated_path,
+                    project.pre_pass_path,
+                    project.pre_pass_cache_dir,
+                    project.chunks_cache_dir,
+                )
+            except GeminiTranslationError as e:
+                if e.summary.total_cost > 0:
+                    project.add_cost("gemini", e.summary.total_cost)
+                logger.error(
+                    f"Stage failed: Translation partial cost "
+                    f"${e.summary.total_cost:.4f} "
+                    f"(pre-pass ${e.summary.pre_pass_cost:.4f}, "
+                    f"completed {e.summary.completed_chunks}/{e.summary.num_chunks}, "
+                    f"retries={e.summary.retries})"
+                )
+                raise
+            if translation_result.total_cost > 0:
+                project.add_cost("gemini", translation_result.total_cost)
             project.mark_progress(ProgressStage.TRANSLATED)
             logger.success("Stage complete: Translation completed")
         else:
@@ -170,6 +185,11 @@ def process_project(project_id: str) -> None:
             logger.success(f"Project {project_id} archived successfully")
         else:
             logger.warning("Archived path is not set, skipping archiving")
+
+        logger.info(
+            f"Project {project_id} total accumulated API cost: "
+            f"${project.total_cost:.4f}"
+        )
 
     except Exception as e:
         logger.error(f"Project processing failed for {project_id}: {e}")
