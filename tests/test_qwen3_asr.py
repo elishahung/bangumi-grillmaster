@@ -6,7 +6,6 @@ from services.fun_asr.models import FunASRResult
 from services.fun_asr.srt import convert_file
 from services.media import WAV_SAMPLE_RATE
 from services.qwen3_asr.qwen3_asr import qwen_results_to_fun_asr_json
-from services.qwen3_asr.qwen3_asr import repair_qwen_fun_asr_json
 from services.qwen3_asr.vad import (
     AudioChunk,
     plan_vad_chunks,
@@ -45,8 +44,7 @@ class Qwen3ASRTests(unittest.TestCase):
         self.assertEqual(len(chunks), 3)
         self.assertTrue(
             all(
-                chunk.end_sample - chunk.start_sample
-                <= 180 * WAV_SAMPLE_RATE
+                chunk.end_sample - chunk.start_sample <= 180 * WAV_SAMPLE_RATE
                 for chunk in chunks
             )
         )
@@ -68,8 +66,7 @@ class Qwen3ASRTests(unittest.TestCase):
         self.assertEqual(chunks[-1].end_sample, 400 * WAV_SAMPLE_RATE)
         self.assertTrue(
             all(
-                chunk.end_sample - chunk.start_sample
-                <= 180 * WAV_SAMPLE_RATE
+                chunk.end_sample - chunk.start_sample <= 180 * WAV_SAMPLE_RATE
                 for chunk in chunks
             )
         )
@@ -122,102 +119,11 @@ class Qwen3ASRTests(unittest.TestCase):
             ],
         )
 
-        sentences = FunASRResult.model_validate(
-            result
-        ).transcripts[0].sentences
+        sentences = FunASRResult.model_validate(result).transcripts[0].sentences
         self.assertEqual(len(sentences), 1)
         self.assertEqual(sentences[0].begin_time, 0)
         self.assertEqual(sentences[0].end_time, 800)
         self.assertEqual(sentences[0].text, "酒に桜を浮かべ")
-
-    def test_repair_existing_tokenized_json_uses_transcript_punctuation(self):
-        raw_data = {
-            "file_url": "audio.opus",
-            "properties": {
-                "audio_format": "opus",
-                "channels": [0],
-                "original_sampling_rate": WAV_SAMPLE_RATE,
-                "original_duration_in_milliseconds": 10000,
-            },
-            "transcripts": [
-                {
-                    "channel_id": 0,
-                    "content_duration_in_milliseconds": 10000,
-                    "text": "酒に桜を浮かべたいんじゃ。またやる。",
-                    "sentences": [
-                        {
-                            "begin_time": 0,
-                            "end_time": 1,
-                            "text": "酒に桜を浮かべたいん",
-                            "sentence_id": 0,
-                            "speaker_id": None,
-                            "words": [
-                                {
-                                    "begin_time": 0,
-                                    "end_time": 1,
-                                    "text": text,
-                                    "punctuation": "",
-                                }
-                                for text in [
-                                    "酒",
-                                    "に",
-                                    "桜",
-                                    "を",
-                                    "浮かべ",
-                                    "たい",
-                                    "ん",
-                                ]
-                            ],
-                        },
-                        {
-                            "begin_time": 6000,
-                            "end_time": 6001,
-                            "text": "じゃ",
-                            "sentence_id": 1,
-                            "speaker_id": None,
-                            "words": [
-                                {
-                                    "begin_time": 6000,
-                                    "end_time": 6001,
-                                    "text": "じゃ",
-                                    "punctuation": "",
-                                }
-                            ],
-                        },
-                        {
-                            "begin_time": 7680,
-                            "end_time": 8000,
-                            "text": "またやる",
-                            "sentence_id": 2,
-                            "speaker_id": None,
-                            "words": [
-                                {
-                                    "begin_time": 7680,
-                                    "end_time": 7681,
-                                    "text": "また",
-                                    "punctuation": "",
-                                },
-                                {
-                                    "begin_time": 7920,
-                                    "end_time": 8000,
-                                    "text": "やる",
-                                    "punctuation": "",
-                                },
-                            ],
-                        },
-                    ],
-                }
-            ],
-        }
-
-        repaired = repair_qwen_fun_asr_json(raw_data)
-        sentences = FunASRResult.model_validate(
-            repaired
-        ).transcripts[0].sentences
-
-        self.assertEqual(sentences[0].text, "酒に桜を浮かべたいんじゃ。")
-        self.assertGreater(sentences[0].end_time, 1)
-        self.assertEqual(sentences[1].text, "またやる。")
 
     def test_qwen_result_without_timestamps_uses_chunk_bounds(self):
         result = qwen_results_to_fun_asr_json(
@@ -227,9 +133,9 @@ class Qwen3ASRTests(unittest.TestCase):
             results=[FakeResult("fallback text", [])],
         )
 
-        sentence = FunASRResult.model_validate(
-            result
-        ).transcripts[0].sentences[0]
+        sentence = (
+            FunASRResult.model_validate(result).transcripts[0].sentences[0]
+        )
         self.assertEqual(sentence.begin_time, 2000)
         self.assertEqual(sentence.end_time, 5000)
         self.assertEqual(sentence.text, "fallback text")

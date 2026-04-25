@@ -17,6 +17,24 @@ from .instructions import chunk_fix_instruction
 LITELLM_TIMEOUT_SECONDS = 6 * 60
 
 
+def _drain_cancelled_task(task: asyncio.Task) -> None:
+    try:
+        task.result()
+    except (asyncio.CancelledError, Exception):
+        pass
+
+
+async def _await_with_manual_timeout(coro, timeout_seconds: float, operation: str):
+    task = asyncio.create_task(coro)
+    done, _ = await asyncio.wait({task}, timeout=timeout_seconds)
+    if task in done:
+        return task.result()
+
+    task.cancel()
+    task.add_done_callback(_drain_cancelled_task)
+    raise TimeoutError(f"{operation} timed out after {timeout_seconds:g}s")
+
+
 def _build_user_message(source_srt: str, broken_output: str, error: str) -> str:
     return (
         "下游譯者輸出的 SRT 結構與來源不符，請在不改動譯文內容的前提下修復對位。\n\n"
@@ -34,14 +52,18 @@ async def _call_once(
     user_message = _build_user_message(source_srt, broken_output, error)
     logger.info(f"{log_prefix} Attempting structural fix via {model}")
 
-    response = await acompletion(
-        model=model,
-        api_key=settings.llm_api_key,
-        timeout=LITELLM_TIMEOUT_SECONDS,
-        messages=[
-            {"role": "system", "content": chunk_fix_instruction},
-            {"role": "user", "content": user_message},
-        ],
+    response = await _await_with_manual_timeout(
+        acompletion(
+            model=model,
+            api_key=settings.llm_api_key,
+            timeout=LITELLM_TIMEOUT_SECONDS,
+            messages=[
+                {"role": "system", "content": chunk_fix_instruction},
+                {"role": "user", "content": user_message},
+            ],
+        ),
+        LITELLM_TIMEOUT_SECONDS,
+        "Chunk fix litellm call",
     )
 
     choice = response.choices[0]
