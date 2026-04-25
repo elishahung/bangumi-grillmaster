@@ -28,7 +28,7 @@ You DO NOT translate subtitles. You analyze the full source SRT (ASR-generated, 
 
 - **tone_notes**: ~100 chars on register/energy derived directly from listening to the audio. Call out which speakers use 敬語 vs 平語 with each other (so the downstream translator preserves politeness asymmetry), and any signature address habits (e.g., "主持人總以 XX 桑 稱呼嘉賓"). E.g., "節奏明快，以關西腔話家常為主，吐槽直接，讚美便當與酒時情感真摯。高潮在花瓣飄入的一刻勝敗感強烈，翻譯時語尾保留關西腔爽快感。"
 
-- **segment_summaries**: EXACTLY one entry per chunk boundary provided. `from_index` and `to_index` must equal the boundary values. `summary` (~80 chars) describes what happens in that local range so the chunk worker has narrative context without reading other chunks.
+- **segment_summaries**: EXACTLY one entry per chunk boundary provided. `from_index` and `to_index` must equal the boundary values. `summary` (~200 chars) describes what happens in that local range so the chunk worker has narrative context without reading other chunks.
 
 ### QUALITY REQUIREMENTS
 - Be exhaustive on `proper_nouns` — every recurring name, place, brand, title. Downstream cannot recover what you miss.
