@@ -148,9 +148,33 @@ class Gemini:
                     pre_pass_result,
                 )
 
-        chunk_results = await asyncio.gather(
-            *[bounded(i, c) for i, c in enumerate(chunks)]
+        raw_chunk_results = await asyncio.gather(
+            *[bounded(i, c) for i, c in enumerate(chunks)],
+            return_exceptions=True,
         )
+
+        chunk_results = []
+        chunk_failures: list[str] = []
+        for i, (chunk, result) in enumerate(zip(chunks, raw_chunk_results)):
+            if isinstance(result, Exception):
+                prefix = f"[chunk {i + 1}/{len(chunks)}]"
+                from_index = chunk[0].index
+                to_index = chunk[-1].index
+                logger.error(
+                    f"{prefix} Failed after all tasks completed: "
+                    f"index {from_index}–{to_index}: {result}"
+                )
+                chunk_failures.append(
+                    f"{prefix} index {from_index}–{to_index}: {result}"
+                )
+                continue
+            chunk_results.append(result)
+
+        if chunk_failures:
+            raise RuntimeError(
+                "One or more chunks failed after all chunk tasks completed: "
+                + "; ".join(chunk_failures)
+            )
 
         # Merge chunk outputs, then rebuild contiguous SRT indices because
         # chunk validation may tolerate a small number of dropped blocks.
