@@ -136,5 +136,71 @@ class WorkflowGeminiCostTests(unittest.TestCase):
         project.mark_progress.assert_not_called()
 
 
+class WorkflowBreakpointTests(unittest.TestCase):
+    def _build_project_mock(self):
+        project = MagicMock()
+        project.id = "demo"
+        project.total_cost = 0.0
+        project.is_metadata_fetched = True
+        project.is_downloaded = True
+        project.is_video_processed = True
+        project.is_audio_processed = True
+        project.is_asr_task_submitted = False
+        project.is_asr_completed = False
+        project.is_srt_completed = False
+        project.is_translated = False
+        project.audio_path = Path("projects/demo/audio.opus")
+        return project
+
+    def test_break_after_asr_task_submission_stops_before_asr_processing(self):
+        project = self._build_project_mock()
+
+        with (
+            patch.object(
+                workflow_module.Project, "from_source_str", return_value=project
+            ),
+            patch.object(workflow_module, "get_asr_client") as get_asr_client,
+            patch.object(workflow_module, "Gemini") as gemini_cls,
+        ):
+            asr = get_asr_client.return_value
+            asr.submit_transcription_task.return_value = "task-123"
+
+            workflow_module.process_project(
+                "demo",
+                break_after=workflow_module.ProgressStage.ASR_TASK_SUBMITTED,
+            )
+
+        asr.submit_transcription_task.assert_called_once_with(
+            "demo", project.audio_path
+        )
+        self.assertEqual(project.asr_task_id, "task-123")
+        project.mark_progress.assert_called_once_with(
+            workflow_module.ProgressStage.ASR_TASK_SUBMITTED
+        )
+        asr.process_transcription_task.assert_not_called()
+        gemini_cls.assert_not_called()
+
+    def test_break_after_completed_stage_stops_on_resumed_project(self):
+        project = self._build_project_mock()
+        project.is_asr_task_submitted = True
+        project.asr_task_id = "existing-task"
+
+        with (
+            patch.object(
+                workflow_module.Project, "from_source_str", return_value=project
+            ),
+            patch.object(workflow_module, "get_asr_client") as get_asr_client,
+            patch.object(workflow_module, "Gemini") as gemini_cls,
+        ):
+            workflow_module.process_project(
+                "demo",
+                break_after=workflow_module.ProgressStage.ASR_TASK_SUBMITTED,
+            )
+
+        get_asr_client.assert_not_called()
+        project.mark_progress.assert_not_called()
+        gemini_cls.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

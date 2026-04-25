@@ -7,6 +7,7 @@ for automatic captioning and translation.
 import typer
 from typing_extensions import Annotated
 from loguru import logger
+from project import ProgressStage
 from workflow import submit_project
 
 
@@ -32,6 +33,19 @@ def process(
             show_default=False,
         ),
     ] = None,
+    break_after: Annotated[
+        ProgressStage | None,
+        typer.Option(
+            "--break-after",
+            "--break",
+            "-break",
+            help=(
+                "Stop after reaching the given workflow stage. "
+                "Example: is_asr_task_submitted."
+            ),
+            show_default=False,
+        ),
+    ] = None,
 ) -> None:
     """Submit and process a online video for captioning and translation.
 
@@ -52,11 +66,16 @@ def process(
         python main.py BV1ZArvBaEqL "This is a machine learning basics video"
     """
     logger.info(
-        f"CLI invoked with source_str={source_str}, translation_hint={translation_hint}"
+        f"CLI invoked with source_str={source_str}, "
+        f"translation_hint={translation_hint}, break_after={break_after}"
     )
 
     try:
-        submit_project(source_str=source_str, translation_hint=translation_hint)
+        submit_project(
+            source_str=source_str,
+            translation_hint=translation_hint,
+            break_after=break_after,
+        )
         logger.success(f"Successfully completed processing for {source_str}")
     except Exception as e:
         logger.error(f"Failed to process video {source_str}: {e}")

@@ -14,7 +14,9 @@ from services.ytdlp import download_video, get_video_info
 
 
 def submit_project(
-    source_str: str, translation_hint: str | None = None
+    source_str: str,
+    translation_hint: str | None = None,
+    break_after: ProgressStage | None = None,
 ) -> None:
     """Submit a new video project for processing.
 
@@ -24,8 +26,9 @@ def submit_project(
 
     Args:
         source_str: The video source, id or url (e.g., 'BV1ZArvBaEqL', 'https://www.bilibili.com/video/BV1ZArvBaEqL').
-        video_description: Optional description of the video content. If not provided,
+        translation_hint: Optional description of the video content. If not provided,
             the video's title will be used as description during metadata fetching.
+        break_after: Optional progress stage to stop after.
 
     Note:
         The project will be automatically saved to the projects directory before
@@ -37,10 +40,28 @@ def submit_project(
     )
     new_project.save()
     logger.info(f"Project saved: {source_str}")
-    process_project(new_project.id)
+    process_project(new_project.id, break_after=break_after)
 
 
-def process_project(project_id: str) -> None:
+def _should_stop_after_stage(
+    project_id: str,
+    break_after: ProgressStage | None,
+    completed_stage: ProgressStage,
+) -> bool:
+    """Return whether workflow should stop after reaching a stage."""
+    if break_after != completed_stage:
+        return False
+
+    logger.warning(
+        f"Breakpoint reached after {completed_stage.value}; "
+        f"stopping project processing: {project_id}"
+    )
+    return True
+
+
+def process_project(
+    project_id: str, break_after: ProgressStage | None = None
+) -> None:
     """Process a video project through the complete captioning pipeline.
 
     This function orchestrates the entire workflow:
@@ -58,6 +79,9 @@ def process_project(project_id: str) -> None:
 
     Args:
         project_id: The unique identifier for the project.
+        break_after: Optional progress stage to stop after. If the stage is
+            already complete on a resumed project, processing stops before the
+            next stage.
 
     Raises:
         Exception: If any stage of the processing fails.
@@ -76,6 +100,10 @@ def process_project(project_id: str) -> None:
             logger.success("Stage complete: Metadata fetched")
         else:
             logger.debug("Stage skipped: Metadata already fetched")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.METADATA_FETCHED
+        ):
+            return
 
         # Download video
         if not project.is_downloaded:
@@ -85,6 +113,10 @@ def process_project(project_id: str) -> None:
             logger.success("Stage complete: Video downloaded")
         else:
             logger.debug("Stage skipped: Video already downloaded")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.DOWNLOADED
+        ):
+            return
 
         # Process video
         if not project.is_video_processed:
@@ -97,6 +129,10 @@ def process_project(project_id: str) -> None:
             logger.success("Stage complete: Video processed")
         else:
             logger.debug("Stage skipped: Video already processed")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.VIDEO_PROCESSED
+        ):
+            return
 
         # Process audio
         if not project.is_audio_processed:
@@ -106,6 +142,10 @@ def process_project(project_id: str) -> None:
             logger.success("Stage complete: Audio extracted")
         else:
             logger.debug("Stage skipped: Audio already extracted")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.AUDIO_PROCESSED
+        ):
+            return
 
         # Submit ASR task
         if not project.is_asr_task_submitted:
@@ -119,6 +159,10 @@ def process_project(project_id: str) -> None:
             logger.success("Stage complete: ASR task submitted")
         else:
             logger.debug("Stage skipped: ASR task already submitted")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.ASR_TASK_SUBMITTED
+        ):
+            return
 
         # Process ASR
         if not project.is_asr_completed:
@@ -132,6 +176,10 @@ def process_project(project_id: str) -> None:
             logger.success("Stage complete: ASR completed")
         else:
             logger.debug("Stage skipped: ASR already completed")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.ASR_COMPLETED
+        ):
+            return
 
         # Process SRT
         if not project.is_srt_completed:
@@ -142,8 +190,12 @@ def process_project(project_id: str) -> None:
             logger.success("Stage complete: SRT generated")
         else:
             logger.debug("Stage skipped: SRT already generated")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.SRT_COMPLETED
+        ):
+            return
 
-        # Process Gemini
+        # Process Translation
         if not project.is_translated:
             logger.info(f"Stage: Translating subtitles for {project_id}")
             gemini = Gemini()
@@ -176,6 +228,10 @@ def process_project(project_id: str) -> None:
             logger.success("Stage complete: Translation completed")
         else:
             logger.debug("Stage skipped: Translation already completed")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.TRANSLATED
+        ):
+            return
 
         logger.success(f"Project processing complete: {project_id}")
 
