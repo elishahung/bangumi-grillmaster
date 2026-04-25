@@ -135,6 +135,13 @@ def _validate_output(
     missing = [
         src for src in expected if src.timecode not in output_by_timecode
     ]
+    if missing and len(missing) <= tolerance:
+        logger.warning(
+            "Output missing {} source block(s) but within tolerance {}: {}",
+            len(missing),
+            tolerance,
+            ", ".join(str(block.index) for block in missing),
+        )
     if len(missing) > tolerance:
         errors.append(
             f"Missing {len(missing)} source block(s) exceeds tolerance {tolerance}"
