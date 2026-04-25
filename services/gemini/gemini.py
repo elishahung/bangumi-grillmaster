@@ -30,7 +30,7 @@ class Gemini:
 
     Flow: parse SRT → split into N char-balanced chunks → run one pre-pass
     analysis call → translate chunks concurrently (bounded by a semaphore) →
-    validate index continuity → write output.
+    normalize merged indices → write output.
     """
 
     def __init__(self):
@@ -147,18 +147,15 @@ class Gemini:
             *[bounded(i, c) for i, c in enumerate(chunks)]
         )
 
-        # Merge and verify sequential index continuity across chunk boundaries.
+        # Merge chunk outputs, then rebuild contiguous SRT indices because
+        # chunk validation may tolerate a small number of dropped blocks.
         all_blocks: list[SrtBlock] = []
         for r in chunk_results:
             all_blocks.extend(r.blocks)
-        for i in range(1, len(all_blocks)):
-            prev = all_blocks[i - 1]
-            curr = all_blocks[i]
-            if curr.index != prev.index + 1:
-                raise ValueError(
-                    f"Index discontinuity at output position {i}: "
-                    f"{prev.index} -> {curr.index}"
-                )
+        all_blocks = [
+            SrtBlock(index=i, timecode=block.timecode, text=block.text)
+            for i, block in enumerate(all_blocks, start=1)
+        ]
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(serialize_srt(all_blocks), encoding="utf-8")

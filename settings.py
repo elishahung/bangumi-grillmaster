@@ -62,6 +62,10 @@ class Settings(BaseSettings):
         default=3,
         description="Maximum retry attempts per chunk on translation failure",
     )
+    gemini_chunk_missing_block_tolerance: int = Field(
+        default=2,
+        description="Maximum number of unmatched/missing subtitle blocks allowed per translated chunk before structural validation fails",
+    )
 
     llm_api_key: str = Field(
         description="API key forwarded to litellm for non-Gemini LLM calls (e.g., OpenRouter for the chunk-fix model)"

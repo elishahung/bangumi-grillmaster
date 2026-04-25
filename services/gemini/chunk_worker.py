@@ -1,4 +1,4 @@
-"""Translate a single SRT chunk concurrently. Strict index/timecode validation on output."""
+"""Translate a single SRT chunk concurrently with timecode-first validation."""
 
 import asyncio
 import hashlib
@@ -103,30 +103,65 @@ def _build_user_message(
 def _validate_output(
     expected: list[SrtBlock], output_text: str
 ) -> list[SrtBlock]:
-    """Parse output SRT and verify structural integrity against input chunk.
+    """Parse output SRT and validate against input chunk by timecode.
 
-    Collects every block-count, index, and timecode mismatch before raising,
-    so the fix layer receives a complete picture of what to repair.
+    Index values from model output are ignored. We accept chunk outputs that
+    keep all emitted timecodes on the source timeline and are missing no more
+    than `settings.gemini_chunk_missing_block_tolerance` source blocks.
+
+    Returned blocks are normalized onto the source chunk's index/timecode
+    spine, then filtered to matched source blocks only.
     """
     parsed = parse_srt(output_text)
     errors: list[str] = []
-    if len(parsed) != len(expected):
+    tolerance = settings.gemini_chunk_missing_block_tolerance
+
+    expected_by_timecode = {block.timecode: block for block in expected}
+    output_by_timecode: dict[str, SrtBlock] = {}
+    duplicate_timecodes: set[str] = set()
+
+    for out in parsed:
+        if out.timecode not in expected_by_timecode:
+            errors.append(
+                f"Unexpected output timecode {out.timecode!r}"
+            )
+            continue
+        if out.timecode in output_by_timecode:
+            duplicate_timecodes.add(out.timecode)
+            continue
+        output_by_timecode[out.timecode] = out
+
+    if duplicate_timecodes:
+        dupes = ", ".join(repr(tc) for tc in sorted(duplicate_timecodes))
+        errors.append(f"Duplicate output timecodes: {dupes}")
+
+    missing = [
+        src for src in expected if src.timecode not in output_by_timecode
+    ]
+    if len(missing) > tolerance:
         errors.append(
-            f"Output block count {len(parsed)} != input {len(expected)}"
+            f"Missing {len(missing)} source block(s) exceeds tolerance {tolerance}"
         )
-    for i, (src, out) in enumerate(zip(expected, parsed)):
-        if out.index != src.index:
-            errors.append(
-                f"Block {i}: output index {out.index} != source {src.index}"
-            )
-        if out.timecode != src.timecode:
-            errors.append(
-                f"Block {i} (index {src.index}): timecode mismatch "
-                f"({out.timecode!r} != {src.timecode!r})"
-            )
+
+    count_delta = len(expected) - len(parsed)
+    if abs(count_delta) > tolerance:
+        errors.append(
+            f"Output block count delta {count_delta} exceeds tolerance {tolerance} "
+            f"(output {len(parsed)} vs input {len(expected)})"
+        )
+
     if errors:
         raise ValueError("; ".join(errors))
-    return parsed
+
+    normalized: list[SrtBlock] = []
+    for src in expected:
+        out = output_by_timecode.get(src.timecode)
+        if out is None:
+            continue
+        normalized.append(
+            SrtBlock(index=src.index, timecode=src.timecode, text=out.text)
+        )
+    return normalized
 
 
 async def translate_chunk(
