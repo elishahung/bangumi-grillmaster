@@ -26,6 +26,7 @@ SRT_FILE_NAME = "video.ja.srt"
 TRANSLATED_FILE_NAME = "video.cht.srt"
 PRE_PASS_FILE_NAME = "pre_pass.json"
 CHUNKS_CACHE_DIR_NAME = "chunks"
+PRE_PASS_CACHE_DIR_NAME = "pre_pass"
 
 
 class ProgressStage(str, Enum):
@@ -399,13 +400,13 @@ class Project(BaseModel):
         return self.project_path / PRE_PASS_FILE_NAME
 
     @property
-    def chunks_cache_dir(self) -> Path:
-        """Get the directory for one-shot per-chunk translation caches.
+    def pre_pass_cache_dir(self) -> Path:
+        """Get the directory for persistent pre-pass multimodal cache assets."""
+        return self.project_path / PRE_PASS_CACHE_DIR_NAME
 
-        This directory is wiped after a successful full translation; it only
-        exists to let re-runs skip chunks that already succeeded on a prior
-        failed attempt.
-        """
+    @property
+    def chunks_cache_dir(self) -> Path:
+        """Get the directory for persistent per-chunk translation caches."""
         return self.project_path / CHUNKS_CACHE_DIR_NAME
 
 

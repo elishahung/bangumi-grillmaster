@@ -62,6 +62,22 @@ class Settings(BaseSettings):
         default=3,
         description="Maximum retry attempts per chunk on translation failure",
     )
+    gemini_chunk_frame_interval_seconds: int = Field(
+        default=30,
+        description="Absolute video frame sampling interval in seconds for chunk translation inputs",
+    )
+    gemini_chunk_frame_max_side: int = Field(
+        default=768,
+        description="Maximum pixel length of the longest side for chunk frame images",
+    )
+    gemini_pre_pass_max_frames: int = Field(
+        default=10,
+        description="Maximum number of evenly sampled reference frames attached to Gemini pre-pass",
+    )
+    gemini_pre_pass_frame_max_side: int = Field(
+        default=768,
+        description="Maximum pixel length of the longest side for pre-pass frame images",
+    )
     gemini_chunk_missing_block_tolerance: int = Field(
         default=2,
         description="Maximum number of unmatched/missing subtitle blocks allowed per translated chunk before structural validation fails",

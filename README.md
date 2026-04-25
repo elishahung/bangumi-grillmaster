@@ -1,12 +1,16 @@
 # Bangumi GrillMaster
 
-下載日本綜藝節目，生成繁體中文 SRT 字幕。
+下載日本綜藝節目，生成繁體中文 SRT 字幕方便個人使用識讀
+
+![](/doc/image2.jpg)
+![](/doc/image3.png)
+![](/doc/image1.png)
 
 ## 說明
 
 - 設定偏好都是個人主觀，如需修改請自行 fork
 - 目標是 one shot 即可直接觀看，不想校準 (避免被暴雷)
-- 一小時左右的影片成本大概 30 台幣 (基本就是 gemini 的成本，ASR 很少)
+- 一小時左右的影片成本大概 15 台幣 (基本就是 gemini 的成本，ASR 很少)
 
 ## 工具
 
@@ -14,21 +18,21 @@
 
 ### ASR
 
-[豆包語音](https://www.volcengine.com/docs/6561/80909)效果最好，但還沒開放海外，走 API 需要認證無法。所以改採 FunASR (`fun-asr-2025-11-07`)，會有英文標點奇怪切割的狀況
+[豆包語音](https://www.volcengine.com/docs/6561/80909)效果最好，但還沒開放海外，走 API 需要認證無法。所以改採 FunASR (`fun-asr-2025-11-07`)，會有英文標點奇怪切割的狀況，會在後期處理
 
 ### 翻譯
 
+測試多種模型還是 Gemini 的潤飾最能抓住日本綜藝的韻味，加上圖片音檔的理解真的很好，但 Gemini 的輸出常常會漏 Index 或弄錯時間軸，所以如果驗證錯誤，會再用 `DeepSeek V4 Flash` 做修正
+
 使用 Gemini 進行**兩階段併發翻譯**：
 
-1. **Pre-pass**：完整 SRT + 節目資訊 + 音檔，要求輸出結構化 JSON 簡報（人物對照、專有名詞/ASR 修正 dict、梗的固定譯法、整體語氣、每段局部摘要）
-2. **併發翻譯**：SRT 按字元數平均切塊（block 邊界對齊），每塊配上 pre-pass 簡報 + 自己的局部摘要 + 音檔，平行送出翻譯
-3. **組裝**：每塊輸出驗證 index/timecode 連續性，再拼接寫檔
+1. **Pre-pass**：完整 SRT + 節目資訊 + 完整音檔 + 少量全片代表圖片，要求輸出結構化 JSON 簡報（人物對照、專有名詞/ASR 修正 dict、梗的固定譯法、整體語氣、每段局部摘要）
+2. **併發翻譯**：SRT 按字元數平均切塊（block 邊界對齊），每塊配上 pre-pass 簡報 + 自己的局部摘要 + 該 chunk 的音檔切片 + 該範圍的代表圖片，平行送出翻譯
+3. **組裝**：每塊輸出驗證 index/timecode 連續性，使用額外 code 專長便宜模型修正，再拼接寫檔
 
-**新增**：`services/gemini/storage.py`（音檔上傳至 Gemini File API；有同名遠端檔則略過上傳）。pre-pass 與每段 chunk 皆帶音檔與文字。
+不只聽音訊，也會參考影片抽出的圖片，幫助辨識人物、場景、道具與畫面上的提示文字
 
-**更動**：翻譯只保留 `GEMINI_MODEL` 一項（併用於 pre-pass 與 chunk；舊的 pre-pass／chunk 分開模型已移除）。預設 `GEMINI_CONCURRENCY` 改為 10。
-
-`pre_pass.json` 可沿用；只重跑 chunk 時不會重跑 pre-pass。
+另外，翻譯過程的 chunk / pre-pass 資源與回應會保留在專案資料夾中，方便失敗後直接 resume，不用每次都重切音訊、重抽圖、重跑整個翻譯
 
 ## 流程
 
@@ -120,10 +124,14 @@ GEMINI_API_KEY=xxx
 GEMINI_MODEL=gemini-3-flash-preview
 
 # 可選：Gemini 翻譯調校
-GEMINI_CHUNK_CHAR_LIMIT=12000          # 每塊目標字元數 (約 10 分鐘字幕)
-GEMINI_CONCURRENCY=10                  # chunk 併發上限
 GEMINI_THINKING_LEVEL=HIGH             # 翻譯 thinking level: LOW/MEDIUM/HIGH
-GEMINI_CHUNK_MAX_RETRIES=3             # 單塊失敗重試次數 (pre-pass 也共用)
+GEMINI_PRE_PASS_MAX_FRAMES=10          # pre-pass 最多附幾張全片代表圖片
+GEMINI_PRE_PASS_FRAME_MAX_SIDE=768     # pre-pass 圖片最長邊尺寸
+GEMINI_CHUNK_CHAR_LIMIT=6000          # 每塊目標字元數 (約 5 分鐘字幕)
+GEMINI_CONCURRENCY=10                  # chunk 併發上限
+GEMINI_CHUNK_MAX_RETRIES=3             # chunk 失敗重試次數
+GEMINI_CHUNK_FRAME_INTERVAL_SECONDS=30   # chunk 圖片抽樣頻率（每幾秒一張）
+GEMINI_CHUNK_FRAME_MAX_SIDE=768        # chunk 圖片最長邊尺寸
 
 # 可選
 COOKIES_TXT_PATH=cookies.txt   # 影片來源網站 cookies (供 yt-dlp 使用)
@@ -139,6 +147,8 @@ projects/{video_id}/
 ├── audio.opus        # 提取的音檔
 ├── asr.json          # FunASR 原始結果
 ├── video.ja.srt      # 日文原文字幕
-├── pre_pass.json     # Gemini pre-pass 簡報 (快取，供重跑翻譯用)
+├── pre_pass.json     # Gemini pre-pass 簡報
+├── pre_pass/         # pre-pass 用的圖片快取
+├── chunks/           # chunk 音檔 / 圖片 / 翻譯回應快取（供 resume）
 └── video.cht.srt     # 繁體中文翻譯字幕
 ```

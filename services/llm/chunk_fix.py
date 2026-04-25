@@ -13,6 +13,8 @@ from loguru import logger
 from settings import settings
 from .instructions import chunk_fix_instruction
 
+LITELLM_TIMEOUT_SECONDS = 6 * 60
+
 
 def _build_user_message(source_srt: str, broken_output: str, error: str) -> str:
     return (
@@ -34,6 +36,7 @@ async def _call_once(
     response = await acompletion(
         model=model,
         api_key=settings.llm_api_key,
+        timeout=LITELLM_TIMEOUT_SECONDS,
         messages=[
             {"role": "system", "content": chunk_fix_instruction},
             {"role": "user", "content": user_message},

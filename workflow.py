@@ -150,9 +150,11 @@ def process_project(project_id: str) -> None:
                 project.translation_hint,
                 project.srt_path,
                 project_id,
+                project.video_path,
                 project.audio_path,
                 project.translated_path,
                 project.pre_pass_path,
+                project.pre_pass_cache_dir,
                 project.chunks_cache_dir,
             )
             project.mark_progress(ProgressStage.TRANSLATED)

@@ -1,7 +1,6 @@
 """Gemini translation orchestrator: pre-pass + concurrent chunked translation."""
 
 import asyncio
-import shutil
 import time
 from pathlib import Path
 
@@ -10,9 +9,10 @@ from loguru import logger
 from pydantic import BaseModel
 
 from settings import settings
+from .assets import prepare_chunk_media_assets
 from .chunk_worker import translate_chunk
 from .chunker import SrtBlock, parse_srt, serialize_srt, split_into_chunks
-from .pre_pass import PrePassResult, run_pre_pass
+from .pre_pass import run_pre_pass
 from .storage import GeminiStorage
 
 
@@ -48,29 +48,28 @@ class Gemini:
         video_description: str | None,
         srt_path: Path,
         audio_key: str,
+        video_path: Path,
         audio_path: Path,
         output_path: Path,
         pre_pass_path: Path,
+        pre_pass_cache_dir: Path,
         chunks_cache_dir: Path,
     ) -> TranslationResult:
         """Translate an SRT file to Traditional Chinese. Blocks until complete.
 
-        The pre-pass briefing is cached at pre_pass_path. If the file exists,
-        the cached briefing is reused (skipping the pre-pass API call); this
-        makes re-runs cheap when an earlier chunk translation failed.
-
-        Per-chunk translations are cached in chunks_cache_dir during the run so
-        that re-runs can skip chunks that already succeeded. The whole cache
-        directory is deleted after the full translation completes.
+        Pre-pass and per-chunk multimodal assets are cached on disk so a later
+        retry can resume without rebuilding media slices or re-uploading files.
         """
         return asyncio.run(
             self._translate_async(
                 video_description,
                 srt_path,
                 audio_key,
+                video_path,
                 audio_path,
                 output_path,
                 pre_pass_path,
+                pre_pass_cache_dir,
                 chunks_cache_dir,
             )
         )
@@ -80,16 +79,20 @@ class Gemini:
         video_description: str | None,
         srt_path: Path,
         audio_key: str,
+        video_path: Path,
         audio_path: Path,
         output_path: Path,
         pre_pass_path: Path,
+        pre_pass_cache_dir: Path,
         chunks_cache_dir: Path,
     ) -> TranslationResult:
         start_time = time.time()
         logger.info(f"Starting translation for SRT file: {srt_path}")
 
         srt_text = srt_path.read_text(encoding="utf-8")
-        audio_file = self.storage.ensure_file(audio_key, audio_path)
+        audio_file = self.storage.ensure_file(
+            audio_key, audio_path, "audio/ogg"
+        )
         blocks = parse_srt(srt_text)
         logger.info(f"Parsed {len(blocks)} SRT blocks")
 
@@ -105,42 +108,44 @@ class Gemini:
                 f"({len(c)} blocks, {sum(b.char_count for b in c)} chars)"
             )
 
-        if pre_pass_path.exists():
-            logger.info(
-                f"[pre-pass] Loading cached briefing from {pre_pass_path}"
-            )
-            pre_pass_result = PrePassResult.model_validate_json(
-                pre_pass_path.read_text(encoding="utf-8")
-            )
-            pre_pass_cost = 0.0
-        else:
-            pre_pass_result, pre_pass_cost = await run_pre_pass(
-                self.client,
-                video_description,
-                srt_text,
-                audio_file,
-                chunks,
-            )
-            pre_pass_path.parent.mkdir(parents=True, exist_ok=True)
-            pre_pass_path.write_text(
-                pre_pass_result.model_dump_json(indent=2),
-                encoding="utf-8",
-            )
-            logger.info(f"[pre-pass] Saved briefing to {pre_pass_path}")
+        pre_pass_result, pre_pass_cost = await run_pre_pass(
+            self.client,
+            self.storage,
+            video_description,
+            srt_text,
+            video_path,
+            audio_key,
+            audio_file,
+            chunks,
+            pre_pass_path,
+            pre_pass_cache_dir,
+        )
 
         chunks_cache_dir.mkdir(parents=True, exist_ok=True)
         semaphore = asyncio.Semaphore(settings.gemini_concurrency)
 
         async def bounded(i: int, chunk: list[SrtBlock]):
             async with semaphore:
+                chunk_assets = prepare_chunk_media_assets(
+                    video_path=video_path,
+                    audio_path=audio_path,
+                    cache_root=chunks_cache_dir,
+                    video_key=audio_key,
+                    chunk=chunk,
+                    chunk_index=i,
+                    total_chunks=len(chunks),
+                    interval_seconds=settings.gemini_chunk_frame_interval_seconds,
+                    max_side=settings.gemini_chunk_frame_max_side,
+                    is_last_chunk=i == len(chunks) - 1,
+                )
                 return await translate_chunk(
                     self.client,
-                    audio_file,
+                    self.storage,
+                    chunk_assets,
                     chunk,
                     i,
                     len(chunks),
                     pre_pass_result,
-                    chunks_cache_dir,
                 )
 
         chunk_results = await asyncio.gather(
@@ -160,16 +165,6 @@ class Gemini:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(serialize_srt(all_blocks), encoding="utf-8")
         logger.success(f"Translation saved to: {output_path}")
-
-        # One-shot chunk cache is only useful until the run succeeds; wipe it
-        # so re-runs of a subsequent (new) translation don't inherit stale files.
-        try:
-            shutil.rmtree(chunks_cache_dir)
-            logger.debug(f"Cleaned up chunk cache dir: {chunks_cache_dir}")
-        except OSError as e:
-            logger.warning(
-                f"Failed to remove chunk cache dir {chunks_cache_dir}: {e}"
-            )
 
         chunk_costs = [r.cost for r in chunk_results]
         total_retries = sum(r.retries for r in chunk_results)

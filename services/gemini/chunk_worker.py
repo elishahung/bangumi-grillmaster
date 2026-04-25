@@ -3,7 +3,6 @@
 import asyncio
 import hashlib
 import json
-from pathlib import Path
 
 from google import genai
 from loguru import logger
@@ -11,10 +10,12 @@ from pydantic import BaseModel
 
 from settings import settings
 from services.llm.chunk_fix import fix_chunk_structure
+from .assets import ChunkMediaAssets
 from .chunker import SrtBlock, parse_srt
 from .cost import calculate_cost
 from .instructions import chunk_instruction
 from .pre_pass import PrePassResult, SegmentSummary
+from .storage import GeminiFileRef, GeminiStorage
 
 
 class ChunkTranslationResult(BaseModel):
@@ -24,34 +25,23 @@ class ChunkTranslationResult(BaseModel):
 
 
 def _raw_cache_path(
-    cache_dir: Path, from_index: int, to_index: int, user_message: str
-) -> Path:
-    """Build the stage-1 (raw chunk output) cache path.
-
-    Hash covers the full user_message (pre-pass briefing + SRT slice + chunk
-    position), so any upstream change invalidates the cache automatically.
-    Raw cache is written on any API response regardless of validation.
-    """
+    response_dir, from_index: int, to_index: int, user_message: str
+):
     digest = hashlib.sha256(user_message.encode("utf-8")).hexdigest()[:8]
-    return cache_dir / f"chunk_{from_index:04d}-{to_index:04d}_{digest}.raw.srt"
+    return response_dir / f"chunk_{from_index:04d}-{to_index:04d}_{digest}.raw.srt"
 
 
 def _fixed_cache_path(
-    cache_dir: Path,
+    response_dir,
     from_index: int,
     to_index: int,
     user_message: str,
     raw_text: str,
-) -> Path:
-    """Build the stage-2 (post-fix) cache path.
-
-    Keyed by (user_message, raw_text) so edits to raw cache or prompt force a
-    re-fix, but untouched raw + fix-instruction combo reuses the prior result.
-    """
+):
     user_digest = hashlib.sha256(user_message.encode("utf-8")).hexdigest()[:8]
     raw_digest = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()[:8]
     return (
-        cache_dir
+        response_dir
         / f"chunk_{from_index:04d}-{to_index:04d}_{user_digest}_{raw_digest}.fixed.srt"
     )
 
@@ -59,9 +49,9 @@ def _fixed_cache_path(
 def _find_segment_summary(
     pre_pass: PrePassResult, from_index: int, to_index: int
 ) -> SegmentSummary | None:
-    for s in pre_pass.segment_summaries:
-        if s.from_index == from_index and s.to_index == to_index:
-            return s
+    for segment in pre_pass.segment_summaries:
+        if segment.from_index == from_index and segment.to_index == to_index:
+            return segment
     return None
 
 
@@ -70,14 +60,12 @@ def _build_user_message(
     chunk_index: int,
     total_chunks: int,
     pre_pass: PrePassResult,
+    media_assets: ChunkMediaAssets,
 ) -> str:
     """Compose chunk-worker user message: briefing (global + local) + SRT slice."""
     from_index = chunk[0].index
     to_index = chunk[-1].index
     segment = _find_segment_summary(pre_pass, from_index, to_index)
-
-    # Pre-pass briefing shared across chunks (everything except other chunks'
-    # segment summaries) plus this chunk's own segment summary.
     briefing = {
         "summary": pre_pass.summary,
         "characters": [c.model_dump() for c in pre_pass.characters],
@@ -87,12 +75,31 @@ def _build_user_message(
         "tone_notes": pre_pass.tone_notes,
         "segment_summary": segment.summary if segment else "",
     }
-
-    srt_slice = "\n\n".join(b.raw for b in chunk)
+    srt_slice = "\n\n".join(block.raw for block in chunk)
+    frame_lines = "\n".join(
+        [
+            f"- {frame.timestamp_seconds:.3f}s"
+            + (
+                " (chunk 首幀)"
+                if abs(
+                    frame.timestamp_seconds
+                    - media_assets.time_range.start_seconds
+                )
+                < 1e-6
+                else ""
+            )
+            for frame in media_assets.frames
+        ]
+    )
 
     return (
         f"你是第 {chunk_index + 1}/{total_chunks} 塊翻譯員，負責 SRT index "
-        f"{from_index}–{to_index}。請嚴格按照以下 pre-pass 簡報翻譯這段 SRT。\n\n"
+        f"{from_index}–{to_index}。\n\n"
+        f"【Chunk 時間範圍】\n"
+        f"{media_assets.time_range.start_seconds:.3f}s - "
+        f"{media_assets.time_range.end_seconds:.3f}s\n\n"
+        f"【Chunk 圖片時間點】\n"
+        f"{frame_lines or '無'}\n\n"
         f"【Pre-pass 簡報】\n"
         f"{json.dumps(briefing, ensure_ascii=False, indent=2)}\n\n"
         f"【SRT 區段（index {from_index}–{to_index}，共 {len(chunk)} block）】\n"
@@ -103,15 +110,7 @@ def _build_user_message(
 def _validate_output(
     expected: list[SrtBlock], output_text: str
 ) -> list[SrtBlock]:
-    """Parse output SRT and validate against input chunk by timecode.
-
-    Index values from model output are ignored. We accept chunk outputs that
-    keep all emitted timecodes on the source timeline and are missing no more
-    than `settings.gemini_chunk_missing_block_tolerance` source blocks.
-
-    Returned blocks are normalized onto the source chunk's index/timecode
-    spine, then filtered to matched source blocks only.
-    """
+    """Parse output SRT and validate against input chunk by timecode."""
     parsed = parse_srt(output_text)
     errors: list[str] = []
     tolerance = settings.gemini_chunk_missing_block_tolerance
@@ -122,9 +121,7 @@ def _validate_output(
 
     for out in parsed:
         if out.timecode not in expected_by_timecode:
-            errors.append(
-                f"Unexpected output timecode {out.timecode!r}"
-            )
+            errors.append(f"Unexpected output timecode {out.timecode!r}")
             continue
         if out.timecode in output_by_timecode:
             duplicate_timecodes.add(out.timecode)
@@ -164,39 +161,62 @@ def _validate_output(
     return normalized
 
 
+def _write_chunk_manifest(
+    media_assets: ChunkMediaAssets,
+    user_message: str,
+    raw_path,
+    fixed_path=None,
+):
+    try:
+        manifest = {}
+        if media_assets.manifest_path.exists():
+            manifest = json.loads(
+                media_assets.manifest_path.read_text(encoding="utf-8")
+            )
+        manifest.update(
+            {
+                "instruction_sha256": hashlib.sha256(
+                    chunk_instruction.encode("utf-8")
+                ).hexdigest(),
+                "user_message_sha256": hashlib.sha256(
+                    user_message.encode("utf-8")
+                ).hexdigest(),
+                "raw_response_path": str(raw_path),
+                "fixed_response_path": str(fixed_path) if fixed_path else None,
+            }
+        )
+        media_assets.manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        logger.warning(
+            f"Failed to update chunk manifest {media_assets.manifest_path}: {e}"
+        )
+
+
 async def translate_chunk(
     client: genai.Client,
-    audio_file: genai.types.File,
+    storage: GeminiStorage,
+    media_assets: ChunkMediaAssets,
     chunk: list[SrtBlock],
     chunk_index: int,
     total_chunks: int,
     pre_pass: PrePassResult,
-    cache_dir: Path,
 ) -> ChunkTranslationResult:
-    """Translate one chunk with two-stage caching.
-
-    Stage 1 (raw): Gemini's response is always written to the `.raw.srt`
-    cache, regardless of structural validity. Chunk-level retries only cover
-    API errors / MAX_TOKENS — validation failures do NOT trigger a chunk retry.
-
-    Stage 2 (fixed): when raw fails validation, the fix layer retries on its
-    own budget (settings.llm_chunk_fix_max_retries). A validated fix result is
-    written to the `.fixed.srt` cache, keyed by raw text digest so an edited
-    raw output or prompt change invalidates it.
-
-    On load: prefer fixed cache → raw cache (validate / fix as needed) → API.
-    Fix exhaustion raises without re-calling Gemini.
-    """
+    """Translate one chunk with persistent media cache and response caching."""
     user_message = _build_user_message(
-        chunk, chunk_index, total_chunks, pre_pass
+        chunk, chunk_index, total_chunks, pre_pass, media_assets
     )
     thinking_level = genai.types.ThinkingLevel[settings.gemini_thinking_level]
 
     prefix = f"[chunk {chunk_index + 1}/{total_chunks}]"
     from_index = chunk[0].index
     to_index = chunk[-1].index
-    raw_path = _raw_cache_path(cache_dir, from_index, to_index, user_message)
-    source_srt = "\n\n".join(b.raw for b in chunk)
+    raw_path = _raw_cache_path(
+        media_assets.response_dir, from_index, to_index, user_message
+    )
+    source_srt = "\n\n".join(block.raw for block in chunk)
 
     raw_text: str | None = None
     api_cost = 0.0
@@ -239,6 +259,19 @@ async def translate_chunk(
 
         max_retries = settings.gemini_chunk_max_retries
         last_error: Exception | None = None
+        gemini_inputs = storage.ensure_files(
+            [
+                media_assets.audio,
+                *[
+                    GeminiFileRef(
+                        key=frame.storage_key,
+                        file_path=frame.path,
+                        mime_type=frame.mime_type,
+                    )
+                    for frame in media_assets.frames
+                ],
+            ]
+        )
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -248,7 +281,7 @@ async def translate_chunk(
                 )
                 response = await client.aio.models.generate_content(
                     model=settings.gemini_model,
-                    contents=[audio_file, user_message],
+                    contents=[*gemini_inputs, user_message],
                     config=config,
                 )
                 api_cost += calculate_cost(
@@ -283,13 +316,14 @@ async def translate_chunk(
 
         try:
             raw_path.write_text(raw_text, encoding="utf-8")
+            _write_chunk_manifest(media_assets, user_message, raw_path)
         except OSError as e:
             logger.warning(
                 f"{prefix} Failed to write raw cache {raw_path.name}: {e}"
             )
 
     fixed_path = _fixed_cache_path(
-        cache_dir, from_index, to_index, user_message, raw_text
+        media_assets.response_dir, from_index, to_index, user_message, raw_text
     )
     if fixed_path.exists():
         try:
@@ -339,6 +373,9 @@ async def translate_chunk(
     blocks = _validate_output(chunk, fixed_text)
     try:
         fixed_path.write_text(fixed_text, encoding="utf-8")
+        _write_chunk_manifest(
+            media_assets, user_message, raw_path, fixed_path=fixed_path
+        )
     except OSError as e:
         logger.warning(
             f"{prefix} Failed to write fixed cache {fixed_path.name}: {e}"

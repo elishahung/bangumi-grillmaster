@@ -1,0 +1,103 @@
+import json
+import shutil
+import unittest
+import uuid
+from pathlib import Path
+from unittest.mock import patch
+
+from services.gemini.assets import (
+    prepare_chunk_media_assets,
+    prepare_pre_pass_media_assets,
+)
+from services.gemini.chunker import SrtBlock
+
+
+class GeminiAssetsTests(unittest.TestCase):
+    def _make_temp_dir(self) -> Path:
+        base = Path(__file__).resolve().parents[1] / "tmp_test_artifacts"
+        base.mkdir(parents=True, exist_ok=True)
+        path = base / f"tmp_assets_{uuid.uuid4().hex[:8]}"
+        path.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(path, ignore_errors=True))
+        return path
+
+    def test_prepare_pre_pass_media_assets_uses_even_spacing(self):
+        root = self._make_temp_dir()
+        video_path = root / "video.mp4"
+
+        with (
+            patch(
+                "services.gemini.assets.MediaProcessor.get_media_duration",
+                return_value=60.0,
+            ),
+            patch(
+                "services.gemini.assets.MediaProcessor.extract_video_frame"
+            ) as extract_frame,
+        ):
+            assets = prepare_pre_pass_media_assets(
+                video_path=video_path,
+                cache_root=root / "pre_pass",
+                video_key="video-key",
+                max_frames=5,
+                max_side=768,
+            )
+
+        self.assertEqual(
+            [frame.timestamp_seconds for frame in assets.frames],
+            [10.0, 20.0, 30.0, 40.0, 50.0],
+        )
+        self.assertEqual(extract_frame.call_count, 5)
+        self.assertTrue(assets.manifest_path.exists())
+
+    def test_prepare_chunk_media_assets_includes_chunk_start_and_interval(self):
+        chunk = [
+            SrtBlock(
+                index=1,
+                timecode="00:01:01,000 --> 00:01:02,000",
+                text="a",
+            ),
+            SrtBlock(
+                index=2,
+                timecode="00:02:59,000 --> 00:03:00,000",
+                text="b",
+            ),
+        ]
+
+        root = self._make_temp_dir()
+        video_path = root / "video.mp4"
+        audio_path = root / "audio.opus"
+
+        with (
+            patch(
+                "services.gemini.assets.MediaProcessor.extract_audio_segment"
+            ),
+            patch(
+                "services.gemini.assets.MediaProcessor.extract_video_frame"
+            ),
+        ):
+            assets = prepare_chunk_media_assets(
+                video_path=video_path,
+                audio_path=audio_path,
+                cache_root=root / "chunks",
+                video_key="video-key",
+                chunk=chunk,
+                chunk_index=0,
+                total_chunks=2,
+                interval_seconds=60,
+                max_side=768,
+                is_last_chunk=False,
+            )
+
+        self.assertEqual(
+            [frame.timestamp_seconds for frame in assets.frames],
+            [61.0, 120.0],
+        )
+        manifest = json.loads(
+            assets.manifest_path.read_text(encoding="utf-8")
+        )
+        self.assertEqual(manifest["interval_seconds"], 60)
+        self.assertEqual(manifest["max_side"], 768)
+
+
+if __name__ == "__main__":
+    unittest.main()

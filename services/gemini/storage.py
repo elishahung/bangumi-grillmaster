@@ -3,6 +3,13 @@ from settings import settings
 from pathlib import Path
 from loguru import logger
 import hashlib
+from pydantic import BaseModel
+
+
+class GeminiFileRef(BaseModel):
+    key: str
+    file_path: Path
+    mime_type: str
 
 
 class GeminiStorage:
@@ -31,7 +38,7 @@ class GeminiStorage:
         logger.debug(f"Converted key to storage name: {key} -> {storage_name}")
         return storage_name
 
-    def upload_file(self, name: str, file_path: Path):
+    def upload_file(self, name: str, file_path: Path, mime_type: str):
         """
         Upload a file to Gemini file storage.
 
@@ -54,7 +61,10 @@ class GeminiStorage:
                 raise FileNotFoundError(f"File not found: {file_path}")
 
             uploaded_file = self.client.files.upload(
-                file=file_path, config=genai.types.UploadFileConfig(name=name)
+                file=file_path,
+                config=genai.types.UploadFileConfig(
+                    name=name, mime_type=mime_type
+                ),
             )
             logger.success(f"Successfully uploaded file to Gemini: {name}")
             return uploaded_file
@@ -87,7 +97,7 @@ class GeminiStorage:
             logger.warning(f"Failed to retrieve file '{name}' from Gemini: {e}")
             return None
 
-    def ensure_file(self, key: str, file_path: Path):
+    def ensure_file(self, key: str, file_path: Path, mime_type: str):
         """
         Ensure a file exists in Gemini storage, uploading it if necessary.
 
@@ -113,4 +123,11 @@ class GeminiStorage:
         logger.info(
             f"File not found in Gemini storage, uploading: {storage_name}"
         )
-        return self.upload_file(storage_name, file_path)
+        return self.upload_file(storage_name, file_path, mime_type)
+
+    def ensure_files(self, refs: list[GeminiFileRef]) -> list[genai.types.File]:
+        """Ensure multiple files exist in Gemini storage in input order."""
+        return [
+            self.ensure_file(ref.key, ref.file_path, ref.mime_type)
+            for ref in refs
+        ]

@@ -1,7 +1,8 @@
-"""Media processing utilities for audio extraction and video manipulation.
+"""Media processing utilities for audio extraction, chunk slicing, and frames.
 
 This module provides the MediaProcessor class for handling common media operations
-such as extracting audio from video files and combining multiple video files.
+such as extracting audio from video files, slicing chunk audio, sampling frames,
+and combining multiple video files.
 """
 
 from pathlib import Path
@@ -9,6 +10,16 @@ import ffmpeg
 import tempfile
 import os
 from loguru import logger
+from pydantic import BaseModel
+
+
+class TimeRange(BaseModel):
+    start_seconds: float
+    end_seconds: float
+
+    @property
+    def duration_seconds(self) -> float:
+        return max(0.0, self.end_seconds - self.start_seconds)
 
 
 class MediaProcessor:
@@ -119,3 +130,151 @@ class MediaProcessor:
         except Exception as e:
             logger.error(f"Failed to combine videos: {e}")
             raise
+
+    @staticmethod
+    def parse_timecode_line(timecode: str) -> TimeRange:
+        """Parse a single SRT timecode line into seconds."""
+        start_str, end_str = [part.strip() for part in timecode.split("-->")]
+        return TimeRange(
+            start_seconds=MediaProcessor._parse_timestamp(start_str),
+            end_seconds=MediaProcessor._parse_timestamp(end_str),
+        )
+
+    @staticmethod
+    def get_media_duration(input_file: Path) -> float:
+        """Read media duration in seconds from ffprobe."""
+        probe = ffmpeg.probe(str(input_file))
+        format_info = probe.get("format", {})
+        duration = format_info.get("duration")
+        if duration is None:
+            raise ValueError(f"Media duration missing: {input_file}")
+        return float(duration)
+
+    @staticmethod
+    def extract_audio_segment(
+        input_file: Path,
+        output_file: Path,
+        start_seconds: float,
+        end_seconds: float,
+    ) -> Path:
+        """Extract an audio slice with the same target settings as full audio."""
+        duration = max(0.0, end_seconds - start_seconds)
+        if duration <= 0:
+            raise ValueError("Audio segment duration must be positive")
+
+        if output_file.exists():
+            logger.debug(f"Reusing cached audio segment: {output_file}")
+            return output_file
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            f"Extracting audio segment {start_seconds:.3f}-{end_seconds:.3f}s "
+            f"to {output_file}"
+        )
+        try:
+            (
+                ffmpeg.input(str(input_file), ss=start_seconds, t=duration)
+                .output(
+                    str(output_file),
+                    ac=1,
+                    ar="16000",
+                    audio_bitrate="24k",
+                )
+                .run(overwrite_output=True, quiet=True)
+            )
+            return output_file
+        except Exception as e:
+            logger.error(f"Failed to extract audio segment: {e}")
+            raise
+
+    @staticmethod
+    def extract_video_frame(
+        input_file: Path,
+        output_file: Path,
+        timestamp_seconds: float,
+        max_side: int,
+    ) -> Path:
+        """Extract a single JPEG frame with longest side constrained."""
+        if max_side <= 0:
+            raise ValueError("max_side must be positive")
+        if output_file.exists():
+            logger.debug(f"Reusing cached frame: {output_file}")
+            return output_file
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            f"Extracting frame at {timestamp_seconds:.3f}s to {output_file}"
+        )
+        scale_filter = (
+            f"if(gte(iw,ih),{max_side},-2)",
+            f"if(gte(iw,ih),-2,{max_side})",
+        )
+        try:
+            stream = ffmpeg.input(str(input_file), ss=timestamp_seconds)
+            (
+                stream.filter("scale", *scale_filter)
+                .output(
+                    str(output_file),
+                    vframes=1,
+                    format="image2",
+                    vcodec="mjpeg",
+                    qscale=2,
+                )
+                .run(overwrite_output=True, quiet=True)
+            )
+            return output_file
+        except Exception as e:
+            logger.error(f"Failed to extract frame: {e}")
+            raise
+
+    @staticmethod
+    def evenly_spaced_timestamps(
+        duration_seconds: float, max_frames: int
+    ) -> list[float]:
+        """Return evenly spaced timestamps inside a media range."""
+        if duration_seconds <= 0 or max_frames <= 0:
+            return []
+        frame_count = max_frames
+        interval = duration_seconds / (frame_count + 1)
+        return [interval * index for index in range(1, frame_count + 1)]
+
+    @staticmethod
+    def absolute_interval_timestamps(
+        start_seconds: float,
+        end_seconds: float,
+        interval_seconds: float,
+        include_start: bool,
+        include_end: bool,
+    ) -> list[float]:
+        """Return deterministic absolute timestamps within a time range."""
+        if interval_seconds <= 0:
+            raise ValueError("interval_seconds must be positive")
+        timestamps: set[float] = set()
+        if include_start:
+            timestamps.add(round(start_seconds, 3))
+
+        first_slot = int(start_seconds // interval_seconds)
+        current = first_slot * interval_seconds
+        if current < start_seconds:
+            current += interval_seconds
+
+        while current < end_seconds or (
+            include_end and abs(current - end_seconds) < 1e-6
+        ):
+            if start_seconds <= current < end_seconds or (
+                include_end and current <= end_seconds
+            ):
+                timestamps.add(round(current, 3))
+            current += interval_seconds
+
+        return sorted(timestamps)
+
+    @staticmethod
+    def _parse_timestamp(timestamp: str) -> float:
+        normalized = timestamp.replace(",", ".")
+        hours, minutes, seconds = normalized.split(":")
+        return (
+            int(hours) * 3600
+            + int(minutes) * 60
+            + float(seconds)
+        )
