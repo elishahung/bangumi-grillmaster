@@ -34,6 +34,22 @@ class FunASR:
         Initialize the FunASR client with OSS storage.
         """
         logger.debug("Initializing FunASR client")
+        missing = [
+            name
+            for name, value in {
+                "DASHSCOPE_API_KEY": settings.dashscope_api_key,
+                "OSS_REGION": settings.oss_region,
+                "OSS_BUCKET": settings.oss_bucket,
+                "OSS_ACCESS_KEY_ID": settings.oss_access_key_id,
+                "OSS_ACCESS_KEY_SECRET": settings.oss_access_key_secret,
+            }.items()
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                "FunASR requires these environment variables: "
+                + ", ".join(missing)
+            )
         self.storage = OSSStorage()
         logger.info("FunASR client initialized successfully")
 
