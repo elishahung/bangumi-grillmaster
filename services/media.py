@@ -7,15 +7,10 @@ and combining multiple video files.
 
 from pathlib import Path
 import ffmpeg
-import io
 import tempfile
 import os
-import subprocess
-from typing import Any
 from loguru import logger
 from pydantic import BaseModel
-
-WAV_SAMPLE_RATE = 16000
 
 
 class TimeRange(BaseModel):
@@ -135,59 +130,6 @@ class MediaProcessor:
         except Exception as e:
             logger.error(f"Failed to combine videos: {e}")
             raise
-
-    @staticmethod
-    def load_audio_waveform(
-        input_file: Path,
-        sample_rate: int = WAV_SAMPLE_RATE,
-    ) -> Any:
-        """Load an audio file as mono float waveform at the target sample rate."""
-        try:
-            import librosa
-
-            wav, _ = librosa.load(
-                str(input_file),
-                sr=sample_rate,
-                mono=True,
-            )
-            return wav
-        except Exception as librosa_error:
-            logger.warning(
-                "librosa failed to load audio, falling back to ffmpeg: "
-                f"{librosa_error}"
-            )
-
-        import soundfile as sf
-
-        command = [
-            "ffmpeg",
-            "-i",
-            str(input_file),
-            "-ar",
-            str(sample_rate),
-            "-ac",
-            "1",
-            "-c:a",
-            "pcm_s16le",
-            "-f",
-            "wav",
-            "-",
-        ]
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        stdout_data, stderr_data = process.communicate()
-        if process.returncode != 0:
-            raise RuntimeError(
-                "FFmpeg failed to load audio: "
-                f"{stderr_data.decode('utf-8', errors='ignore')}"
-            )
-
-        with io.BytesIO(stdout_data) as data_io:
-            wav, _ = sf.read(data_io, dtype="float32")
-        return wav
 
     @staticmethod
     def parse_timecode_line(timecode: str) -> TimeRange:

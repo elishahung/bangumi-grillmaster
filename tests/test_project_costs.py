@@ -159,10 +159,10 @@ class WorkflowBreakpointTests(unittest.TestCase):
             patch.object(
                 workflow_module.Project, "from_source_str", return_value=project
             ),
-            patch.object(workflow_module, "get_asr_client") as get_asr_client,
+            patch.object(workflow_module, "FunASR") as fun_asr_cls,
             patch.object(workflow_module, "Gemini") as gemini_cls,
         ):
-            asr = get_asr_client.return_value
+            asr = fun_asr_cls.return_value
             asr.submit_transcription_task.return_value = "task-123"
 
             workflow_module.process_project(
@@ -189,7 +189,7 @@ class WorkflowBreakpointTests(unittest.TestCase):
             patch.object(
                 workflow_module.Project, "from_source_str", return_value=project
             ),
-            patch.object(workflow_module, "get_asr_client") as get_asr_client,
+            patch.object(workflow_module, "FunASR") as fun_asr_cls,
             patch.object(workflow_module, "Gemini") as gemini_cls,
         ):
             workflow_module.process_project(
@@ -197,7 +197,7 @@ class WorkflowBreakpointTests(unittest.TestCase):
                 break_after=workflow_module.ProgressStage.ASR_TASK_SUBMITTED,
             )
 
-        get_asr_client.assert_not_called()
+        fun_asr_cls.assert_not_called()
         project.mark_progress.assert_not_called()
         gemini_cls.assert_not_called()
 

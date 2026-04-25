@@ -7,7 +7,7 @@ of the video captioning workflow, from fetching metadata to translation.
 from project import Project, ProgressStage, VideoSource
 from loguru import logger
 from settings import settings
-from services.asr import get_asr_client
+from services.fun_asr import FunASR
 from services.gemini import Gemini, GeminiTranslationError
 from services.media import MediaProcessor
 from services.ytdlp import download_video, get_video_info
@@ -150,7 +150,7 @@ def process_project(
         # Submit ASR task
         if not project.is_asr_task_submitted:
             logger.info(f"Stage: Submitting ASR task for {project_id}")
-            asr = get_asr_client()
+            asr = FunASR()
             task_id = asr.submit_transcription_task(
                 project.id, project.audio_path
             )
@@ -168,7 +168,7 @@ def process_project(
         if not project.is_asr_completed:
             assert project.asr_task_id is not None
             logger.info(f"Stage: Running ASR for {project_id}")
-            asr = get_asr_client()
+            asr = FunASR()
             asr.process_transcription_task(
                 project.id, project.asr_task_id, project.asr_path
             )
@@ -184,7 +184,7 @@ def process_project(
         # Process SRT
         if not project.is_srt_completed:
             logger.info(f"Stage: Converting to SRT for {project_id}")
-            asr = get_asr_client()
+            asr = FunASR()
             asr.convert_to_srt(project.asr_path, project.srt_path)
             project.mark_progress(ProgressStage.SRT_COMPLETED)
             logger.success("Stage complete: SRT generated")

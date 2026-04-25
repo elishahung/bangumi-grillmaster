@@ -20,13 +20,6 @@
 
 [豆包語音](https://www.volcengine.com/docs/6561/80909)效果最好，但還沒開放海外，走 API 需要認證無法。所以改採 FunASR (`fun-asr-2025-11-07`)，會有英文標點奇怪切割的狀況，會在後期處理
 
-也可改用本機 Qwen3-ASR：
-
-- `ASR_PROVIDER=qwen3_asr` 會使用 `Qwen/Qwen3-ASR-1.7B`
-- 時間軸使用 `Qwen/Qwen3-ForcedAligner-0.6B`
-- 長音檔會先用 Silero VAD 切段，再批次送入本機模型
-- 第一次執行會下載模型權重；建議使用 CUDA GPU，並依本機 CUDA/PyTorch 環境自行安裝相容的 `torch`
-
 ### 翻譯
 
 測試多種模型還是 Gemini 的潤飾最能抓住日本綜藝的韻味，加上圖片音檔的理解真的很好，但 Gemini 的輸出常常會漏 Index 或弄錯時間軸，所以如果驗證錯誤，會再用 `DeepSeek V4 Flash` 做修正
@@ -52,7 +45,7 @@ Video ID
     ↓
 提取音檔 (FFmpeg, mono 16kHz opus)
     ↓
-語音辨識 (FunASR 或本機 Qwen3-ASR)
+語音辨識 (FunASR)
     ↓
 生成 SRT 字幕
     ↓
@@ -116,29 +109,15 @@ grill "https://www.bilibili.com/video/BV18KBJBeEmV"
 建立 `.env` 檔案：
 
 ```env
-# ASR provider
-ASR_PROVIDER=fun_asr       # fun_asr 或 qwen3_asr
-
-# Alibaba DashScope (FunASR；ASR_PROVIDER=fun_asr 時需要)
+# Alibaba DashScope (FunASR)
 DASHSCOPE_API_KEY=sk-xxx
 FUN_ASR_MODEL=fun-asr
 
-# Alibaba OSS (FunASR 暫存音檔；ASR_PROVIDER=fun_asr 時需要)
+# Alibaba OSS (FunASR 暫存音檔)
 OSS_REGION=cn-beijing
 OSS_BUCKET=your-bucket-name
 OSS_ACCESS_KEY_ID=xxx
 OSS_ACCESS_KEY_SECRET=xxx
-
-# 本機 Qwen3-ASR（ASR_PROVIDER=qwen3_asr 時使用）
-QWEN3_ASR_MODEL=Qwen/Qwen3-ASR-1.7B
-QWEN3_ASR_FORCED_ALIGNER=Qwen/Qwen3-ForcedAligner-0.6B
-QWEN3_ASR_DEVICE_MAP=cuda:0
-QWEN3_ASR_DTYPE=bfloat16
-QWEN3_ASR_MAX_INFERENCE_BATCH_SIZE=8
-QWEN3_ASR_MAX_NEW_TOKENS=1024
-QWEN3_ASR_VAD_SEGMENT_SECONDS=120
-QWEN3_ASR_VAD_MAX_SEGMENT_SECONDS=180
-QWEN3_ASR_LANGUAGE=Japanese
 
 # Google Gemini (翻譯)
 GEMINI_API_KEY=xxx

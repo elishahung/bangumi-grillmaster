@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,20 +9,14 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # --- ASR: routing --------------------------------------------------------
-    asr_provider: Literal["fun_asr", "qwen3_asr"] = Field(
-        default="fun_asr",
-        description="ASR provider to use. fun_asr uses DashScope; qwen3_asr runs Qwen3-ASR locally.",
-    )
+    # --- ASR: FunASR (DashScope + OSS) --------------------------------------
     fun_asr_model: str = Field(
         default="fun-asr",
         description="Model identifier for ASR (Automatic Speech Recognition) processing",
     )
-
-    # --- ASR: FunASR (DashScope + OSS; required when asr_provider=fun_asr) -----
     dashscope_api_key: str | None = Field(
         default=None,
-        description="API key for DashScope service (Alibaba Cloud). Required when ASR_PROVIDER=fun_asr",
+        description="API key for DashScope service (Alibaba Cloud)",
     )
     dashscope_api_url: str = Field(
         default="https://dashscope.aliyuncs.com/api/v1",
@@ -31,57 +24,19 @@ class Settings(BaseSettings):
     )
     oss_region: str | None = Field(
         default=None,
-        description="Alibaba Cloud OSS region. Required when ASR_PROVIDER=fun_asr",
+        description="Alibaba Cloud OSS region",
     )
     oss_bucket: str | None = Field(
         default=None,
-        description="Alibaba Cloud OSS bucket name. Required when ASR_PROVIDER=fun_asr",
+        description="Alibaba Cloud OSS bucket name",
     )
     oss_access_key_id: str | None = Field(
         default=None,
-        description="Alibaba Cloud OSS access key ID for authentication. Required when ASR_PROVIDER=fun_asr",
+        description="Alibaba Cloud OSS access key ID for authentication",
     )
     oss_access_key_secret: str | None = Field(
         default=None,
-        description="Alibaba Cloud OSS access key secret for authentication. Required when ASR_PROVIDER=fun_asr",
-    )
-
-    # --- ASR: local Qwen3 (when asr_provider=qwen3_asr) -----------------------
-    qwen3_asr_model: str = Field(
-        default="Qwen/Qwen3-ASR-1.7B",
-        description="Qwen3-ASR model id or local checkpoint path",
-    )
-    qwen3_asr_forced_aligner: str = Field(
-        default="Qwen/Qwen3-ForcedAligner-0.6B",
-        description="Qwen3 forced aligner model id or local checkpoint path used for timestamps",
-    )
-    qwen3_asr_device_map: str = Field(
-        default="cuda:0",
-        description="Device map passed to Qwen3-ASR and forced aligner",
-    )
-    qwen3_asr_dtype: str = Field(
-        default="bfloat16",
-        description="Torch dtype name passed to Qwen3-ASR and forced aligner",
-    )
-    qwen3_asr_max_inference_batch_size: int = Field(
-        default=8,
-        description="Maximum Qwen3-ASR inference batch size",
-    )
-    qwen3_asr_max_new_tokens: int = Field(
-        default=1024,
-        description="Maximum tokens generated per Qwen3-ASR chunk",
-    )
-    qwen3_asr_vad_segment_seconds: int = Field(
-        default=120,
-        description="Target duration in seconds for VAD-based Qwen3-ASR chunks",
-    )
-    qwen3_asr_vad_max_segment_seconds: int = Field(
-        default=180,
-        description="Hard maximum duration in seconds for Qwen3-ASR chunks",
-    )
-    qwen3_asr_language: str | None = Field(
-        default="Japanese",
-        description="Language hint passed to Qwen3-ASR. Set empty/null for automatic language detection",
+        description="Alibaba Cloud OSS access key secret for authentication",
     )
 
     # --- Translation: Gemini -----------------------------------------------
