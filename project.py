@@ -40,7 +40,6 @@ class ProgressStage(str, Enum):
     DOWNLOADED = "is_downloaded"
     VIDEO_PROCESSED = "is_video_processed"
     AUDIO_PROCESSED = "is_audio_processed"
-    ASR_TASK_SUBMITTED = "is_asr_task_submitted"
     ASR_COMPLETED = "is_asr_completed"
     SRT_COMPLETED = "is_srt_completed"
     TRANSLATED = "is_translated"
@@ -68,7 +67,6 @@ class Project(BaseModel):
         is_downloaded: Whether video has been downloaded.
         is_video_processed: Whether video segments have been combined.
         is_audio_processed: Whether audio has been extracted.
-        is_asr_task_submitted: Whether speech recognition task has been submitted.
         is_asr_completed: Whether speech recognition has been completed.
         is_srt_completed: Whether SRT subtitle file has been generated.
         is_translated: Whether translation has been completed.
@@ -78,7 +76,6 @@ class Project(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     name: str = Field(default="video")
     translation_hint: str | None = None
-    asr_task_id: str | None = None
     total_cost: float = 0.0
     service_costs: dict[str, float] = Field(default_factory=dict)
 
@@ -87,7 +84,6 @@ class Project(BaseModel):
     is_downloaded: bool = False
     is_video_processed: bool = False
     is_audio_processed: bool = False
-    is_asr_task_submitted: bool = False
     is_asr_completed: bool = False
     is_srt_completed: bool = False
     is_translated: bool = False

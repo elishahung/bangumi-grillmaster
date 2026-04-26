@@ -4,10 +4,10 @@ This module provides the main processing function that coordinates all stages
 of the video captioning workflow, from fetching metadata to translation.
 """
 
-from project import Project, ProgressStage, VideoSource
+from project import Project, ProgressStage
 from loguru import logger
 from settings import settings
-from services.fun_asr import FunASR
+from services.elevenlabs import ElevenLabsASR, SrtFormatOptions, convert_file
 from services.gemini import Gemini, GeminiTranslationError
 from services.media import MediaProcessor
 from services.ytdlp import download_video, get_video_info
@@ -69,10 +69,9 @@ def process_project(
     2. Download video
     3. Combine downloaded video segments
     4. Extract audio from video
-    5. Perform automatic speech recognition (ASR)
-    6. Convert ASR results to SRT format
-    7. Translate subtitles using Gemini
-    8. Archive project (optional)
+    5. Perform automatic speech recognition (ASR) and write source SRT
+    6. Translate subtitles using Gemini
+    7. Archive project (optional)
 
     Each stage is skipped if it has already been completed (idempotent).
     Progress is automatically saved after each stage.
@@ -147,31 +146,11 @@ def process_project(
         ):
             return
 
-        # Submit ASR task
-        if not project.is_asr_task_submitted:
-            logger.info(f"Stage: Submitting ASR task for {project_id}")
-            asr = FunASR()
-            task_id = asr.submit_transcription_task(
-                project.id, project.audio_path
-            )
-            project.asr_task_id = task_id
-            project.mark_progress(ProgressStage.ASR_TASK_SUBMITTED)
-            logger.success("Stage complete: ASR task submitted")
-        else:
-            logger.debug("Stage skipped: ASR task already submitted")
-        if _should_stop_after_stage(
-            project_id, break_after, ProgressStage.ASR_TASK_SUBMITTED
-        ):
-            return
-
         # Process ASR
         if not project.is_asr_completed:
-            assert project.asr_task_id is not None
             logger.info(f"Stage: Running ASR for {project_id}")
-            asr = FunASR()
-            asr.process_transcription_task(
-                project.id, project.asr_task_id, project.asr_path
-            )
+            asr = ElevenLabsASR()
+            asr.transcribe_to_file(project.audio_path, project.asr_path)
             project.mark_progress(ProgressStage.ASR_COMPLETED)
             logger.success("Stage complete: ASR completed")
         else:
@@ -183,9 +162,19 @@ def process_project(
 
         # Process SRT
         if not project.is_srt_completed:
-            logger.info(f"Stage: Converting to SRT for {project_id}")
-            asr = FunASR()
-            asr.convert_to_srt(project.asr_path, project.srt_path)
+            logger.info(f"Stage: Converting ASR JSON to SRT for {project_id}")
+            convert_file(
+                project.asr_path,
+                project.srt_path,
+                options=SrtFormatOptions(
+                    max_characters_per_line=settings.elevenlabs_srt_max_characters_per_line,
+                    max_segment_chars=settings.elevenlabs_srt_max_segment_chars,
+                    max_segment_duration_s=settings.elevenlabs_srt_max_segment_duration_s,
+                    segment_on_silence_longer_than_s=settings.elevenlabs_srt_segment_on_silence_longer_than_s,
+                    merge_speaker_turns_gap_s=settings.elevenlabs_srt_merge_speaker_turns_gap_s,
+                    max_lines_per_block=settings.elevenlabs_srt_max_lines_per_block,
+                ),
+            )
             project.mark_progress(ProgressStage.SRT_COMPLETED)
             logger.success("Stage complete: SRT generated")
         else:

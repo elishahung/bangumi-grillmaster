@@ -44,7 +44,7 @@ class ProjectCostTests(unittest.TestCase):
 
             project.add_cost("gemini", 1.25)
             project.add_cost("gemini", 0.75)
-            project.add_cost("fun_asr", 2.0)
+            project.add_cost("elevenlabs", 2.0)
 
             persisted = json.loads(
                 project.json_path.read_text(encoding="utf-8")
@@ -52,10 +52,10 @@ class ProjectCostTests(unittest.TestCase):
 
         self.assertEqual(project.total_cost, 4.0)
         self.assertEqual(project.service_costs["gemini"], 2.0)
-        self.assertEqual(project.service_costs["fun_asr"], 2.0)
+        self.assertEqual(project.service_costs["elevenlabs"], 2.0)
         self.assertEqual(persisted["total_cost"], 4.0)
         self.assertEqual(persisted["service_costs"]["gemini"], 2.0)
-        self.assertEqual(persisted["service_costs"]["fun_asr"], 2.0)
+        self.assertEqual(persisted["service_costs"]["elevenlabs"], 2.0)
 
 
 class WorkflowGeminiCostTests(unittest.TestCase):
@@ -68,7 +68,6 @@ class WorkflowGeminiCostTests(unittest.TestCase):
         project.is_downloaded = True
         project.is_video_processed = True
         project.is_audio_processed = True
-        project.is_asr_task_submitted = True
         project.is_asr_completed = True
         project.is_srt_completed = True
         project.is_translated = False
@@ -145,59 +144,60 @@ class WorkflowBreakpointTests(unittest.TestCase):
         project.is_downloaded = True
         project.is_video_processed = True
         project.is_audio_processed = True
-        project.is_asr_task_submitted = False
         project.is_asr_completed = False
         project.is_srt_completed = False
         project.is_translated = False
         project.audio_path = Path("projects/demo/audio.opus")
+        project.asr_path = Path("projects/demo/asr.json")
+        project.srt_path = Path("projects/demo/video.ja.srt")
         return project
 
-    def test_break_after_asr_task_submission_stops_before_asr_processing(self):
+    def test_break_after_asr_completed_stops_before_translation(self):
         project = self._build_project_mock()
 
         with (
             patch.object(
                 workflow_module.Project, "from_source_str", return_value=project
             ),
-            patch.object(workflow_module, "FunASR") as fun_asr_cls,
+            patch.object(workflow_module, "ElevenLabsASR") as elevenlabs_cls,
+            patch.object(workflow_module, "convert_file") as convert_file,
             patch.object(workflow_module, "Gemini") as gemini_cls,
         ):
-            asr = fun_asr_cls.return_value
-            asr.submit_transcription_task.return_value = "task-123"
+            asr = elevenlabs_cls.return_value
 
             workflow_module.process_project(
                 "demo",
-                break_after=workflow_module.ProgressStage.ASR_TASK_SUBMITTED,
+                break_after=workflow_module.ProgressStage.ASR_COMPLETED,
             )
 
-        asr.submit_transcription_task.assert_called_once_with(
-            "demo", project.audio_path
+        asr.transcribe_to_file.assert_called_once_with(
+            project.audio_path, project.asr_path
         )
-        self.assertEqual(project.asr_task_id, "task-123")
+        convert_file.assert_not_called()
         project.mark_progress.assert_called_once_with(
-            workflow_module.ProgressStage.ASR_TASK_SUBMITTED
+            workflow_module.ProgressStage.ASR_COMPLETED
         )
-        asr.process_transcription_task.assert_not_called()
         gemini_cls.assert_not_called()
 
     def test_break_after_completed_stage_stops_on_resumed_project(self):
         project = self._build_project_mock()
-        project.is_asr_task_submitted = True
-        project.asr_task_id = "existing-task"
+        project.is_asr_completed = True
 
         with (
             patch.object(
                 workflow_module.Project, "from_source_str", return_value=project
             ),
-            patch.object(workflow_module, "FunASR") as fun_asr_cls,
+            patch.object(workflow_module, "ElevenLabsASR") as elevenlabs_cls,
+            patch.object(workflow_module, "convert_file") as convert_file,
             patch.object(workflow_module, "Gemini") as gemini_cls,
         ):
             workflow_module.process_project(
                 "demo",
-                break_after=workflow_module.ProgressStage.ASR_TASK_SUBMITTED,
+                break_after=workflow_module.ProgressStage.ASR_COMPLETED,
             )
 
-        fun_asr_cls.assert_not_called()
+        elevenlabs_cls.assert_not_called()
+        convert_file.assert_not_called()
         project.mark_progress.assert_not_called()
         gemini_cls.assert_not_called()
 

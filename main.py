@@ -41,7 +41,7 @@ def process(
             "-break",
             help=(
                 "Stop after reaching the given workflow stage. "
-                "Example: is_asr_task_submitted."
+                "Example: is_asr_completed."
             ),
             show_default=False,
         ),

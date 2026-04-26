@@ -9,34 +9,42 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # --- ASR: FunASR (DashScope + OSS) --------------------------------------
-    fun_asr_model: str = Field(
-        default="fun-asr",
-        description="Model identifier for ASR (Automatic Speech Recognition) processing",
-    )
-    dashscope_api_key: str | None = Field(
+    # --- ASR: ElevenLabs Scribe ---------------------------------------------
+    elevenlabs_api_key: str | None = Field(
         default=None,
-        description="API key for DashScope service (Alibaba Cloud)",
+        description="API key for ElevenLabs Speech to Text",
     )
-    dashscope_api_url: str = Field(
-        default="https://dashscope.aliyuncs.com/api/v1",
-        description="Base HTTP API URL for DashScope service (Alibaba Cloud)",
+    elevenlabs_stt_model: str = Field(
+        default="scribe_v2",
+        description="ElevenLabs Speech to Text model identifier",
     )
-    oss_region: str | None = Field(
-        default=None,
-        description="Alibaba Cloud OSS region",
+    elevenlabs_stt_language_code: str = Field(
+        default="jpn",
+        description="Language code hint for ElevenLabs Speech to Text",
     )
-    oss_bucket: str | None = Field(
-        default=None,
-        description="Alibaba Cloud OSS bucket name",
+    elevenlabs_srt_max_characters_per_line: int = Field(
+        default=24,
+        description="Maximum characters per rendered source SRT line",
     )
-    oss_access_key_id: str | None = Field(
-        default=None,
-        description="Alibaba Cloud OSS access key ID for authentication",
+    elevenlabs_srt_max_segment_chars: int = Field(
+        default=48,
+        description="Maximum text characters per source SRT subtitle block",
     )
-    oss_access_key_secret: str | None = Field(
-        default=None,
-        description="Alibaba Cloud OSS access key secret for authentication",
+    elevenlabs_srt_max_segment_duration_s: float = Field(
+        default=4,
+        description="Maximum duration in seconds per source SRT subtitle block",
+    )
+    elevenlabs_srt_segment_on_silence_longer_than_s: float = Field(
+        default=0.5,
+        description="Split source SRT segments when silence exceeds this duration",
+    )
+    elevenlabs_srt_merge_speaker_turns_gap_s: float = Field(
+        default=0.1,
+        description="Merge adjacent speaker turns into one dialogue subtitle when the gap is below this duration",
+    )
+    elevenlabs_srt_max_lines_per_block: int = Field(
+        default=3,
+        description="Maximum rendered lines per source SRT subtitle block",
     )
 
     # --- Translation: Gemini -----------------------------------------------

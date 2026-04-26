@@ -18,7 +18,7 @@
 
 ### ASR
 
-[豆包語音](https://www.volcengine.com/docs/6561/80909)效果最好，但還沒開放海外，走 API 需要認證無法。所以改採 FunASR (`fun-asr-2025-11-07`)，會有英文標點奇怪切割的狀況，會在後期處理
+[ElevenLabs Scribe v2](https://elevenlabs.io/docs/eleven-api/guides/cookbooks/speech-to-text) 日文辨識效果穩定，尤其在一堆人大聲喧嘩，或者裝傻吐槽之間無間隔狀況都能分析出來。
 
 ### 翻譯
 
@@ -45,9 +45,9 @@ Video ID
     ↓
 提取音檔 (FFmpeg, mono 16kHz opus)
     ↓
-語音辨識 (FunASR)
+語音辨識 (ElevenLabs Scribe v2)
     ↓
-生成 SRT 字幕
+產生 SRT 字幕
     ↓
 翻譯字幕 (Gemini: pre-pass → 併發 chunk 翻譯 → 組裝驗證)
     ↓
@@ -109,15 +109,17 @@ grill "https://www.bilibili.com/video/BV18KBJBeEmV"
 建立 `.env` 檔案：
 
 ```env
-# Alibaba DashScope (FunASR)
-DASHSCOPE_API_KEY=sk-xxx
-FUN_ASR_MODEL=fun-asr
+# ElevenLabs Speech to Text
+ELEVENLABS_API_KEY=xxx
+ELEVENLABS_STT_MODEL=scribe_v2
 
-# Alibaba OSS (FunASR 暫存音檔)
-OSS_REGION=cn-beijing
-OSS_BUCKET=your-bucket-name
-OSS_ACCESS_KEY_ID=xxx
-OSS_ACCESS_KEY_SECRET=xxx
+# 可選：ElevenLabs JSON -> SRT 格式轉換
+ELEVENLABS_SRT_MAX_CHARACTERS_PER_LINE=24
+ELEVENLABS_SRT_MAX_SEGMENT_CHARS=48
+ELEVENLABS_SRT_MAX_SEGMENT_DURATION_S=5.5
+ELEVENLABS_SRT_SEGMENT_ON_SILENCE_LONGER_THAN_S=0.7
+ELEVENLABS_SRT_MERGE_SPEAKER_TURNS_GAP_S=0.45
+ELEVENLABS_SRT_MAX_LINES_PER_BLOCK=2
 
 # Google Gemini (翻譯)
 GEMINI_API_KEY=xxx
@@ -145,7 +147,7 @@ projects/{video_id}/
 ├── project.json      # 專案狀態
 ├── video.mp4         # 合併後的影片
 ├── audio.opus        # 提取的音檔
-├── asr.json          # FunASR 原始結果
+├── asr.json          # ElevenLabs 原始結果
 ├── video.ja.srt      # 日文原文字幕
 ├── pre_pass.json     # Gemini pre-pass 簡報
 ├── pre_pass/         # pre-pass 用的圖片快取
