@@ -150,7 +150,15 @@ def process_project(
         if not project.is_asr_completed:
             logger.info(f"Stage: Running ASR for {project_id}")
             asr = ElevenLabsASR()
-            asr.transcribe_to_file(project.audio_path, project.asr_path)
+            transcription_result = asr.transcribe_to_file(
+                project.audio_path, project.asr_path
+            )
+            if transcription_result.total_cost > 0:
+                project.add_cost("elevenlabs", transcription_result.total_cost)
+            logger.info(
+                f"Stage ASR cost: ${transcription_result.total_cost:.4f} "
+                f"for {transcription_result.audio_duration_secs:.2f}s"
+            )
             project.mark_progress(ProgressStage.ASR_COMPLETED)
             logger.success("Stage complete: ASR completed")
         else:

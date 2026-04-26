@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import project as project_module
 import workflow as workflow_module
 from project import Project
+from services.elevenlabs.asr import ElevenLabsTranscriptionResult
 from services.gemini.errors import GeminiTranslationError, TranslationCostSummary
 
 
@@ -135,6 +136,53 @@ class WorkflowGeminiCostTests(unittest.TestCase):
         project.mark_progress.assert_not_called()
 
 
+class WorkflowElevenLabsCostTests(unittest.TestCase):
+    def _build_project_mock(self):
+        project = MagicMock()
+        project.id = "demo"
+        project.total_cost = 0.0
+        project.is_metadata_fetched = True
+        project.is_downloaded = True
+        project.is_video_processed = True
+        project.is_audio_processed = True
+        project.is_asr_completed = False
+        project.is_srt_completed = False
+        project.is_translated = False
+        base = Path("projects/demo")
+        project.audio_path = base / "audio.opus"
+        project.asr_path = base / "asr.json"
+        project.srt_path = base / "video.ja.srt"
+        return project
+
+    def test_workflow_persists_elevenlabs_cost_on_asr_success(self):
+        project = self._build_project_mock()
+        result = ElevenLabsTranscriptionResult(
+            audio_duration_secs=1800,
+            total_cost=0.11,
+        )
+
+        with (
+            patch.object(
+                workflow_module.Project, "from_source_str", return_value=project
+            ),
+            patch.object(workflow_module, "ElevenLabsASR") as elevenlabs_cls,
+            patch.object(workflow_module, "convert_file") as convert_file,
+            patch.object(workflow_module, "Gemini") as gemini_cls,
+        ):
+            elevenlabs_cls.return_value.transcribe_to_file.return_value = result
+            workflow_module.process_project(
+                "demo",
+                break_after=workflow_module.ProgressStage.ASR_COMPLETED,
+            )
+
+        project.add_cost.assert_called_once_with("elevenlabs", 0.11)
+        project.mark_progress.assert_called_once_with(
+            workflow_module.ProgressStage.ASR_COMPLETED
+        )
+        convert_file.assert_not_called()
+        gemini_cls.assert_not_called()
+
+
 class WorkflowBreakpointTests(unittest.TestCase):
     def _build_project_mock(self):
         project = MagicMock()
@@ -164,6 +212,10 @@ class WorkflowBreakpointTests(unittest.TestCase):
             patch.object(workflow_module, "Gemini") as gemini_cls,
         ):
             asr = elevenlabs_cls.return_value
+            asr.transcribe_to_file.return_value = ElevenLabsTranscriptionResult(
+                audio_duration_secs=1800,
+                total_cost=0.11,
+            )
 
             workflow_module.process_project(
                 "demo",

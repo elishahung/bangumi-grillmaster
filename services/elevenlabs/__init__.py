@@ -1,4 +1,9 @@
-__all__ = ["ElevenLabsASR", "SrtFormatOptions", "convert_file"]
+__all__ = [
+    "ElevenLabsASR",
+    "ElevenLabsTranscriptionResult",
+    "SrtFormatOptions",
+    "convert_file",
+]
 
 
 def __getattr__(name: str):
@@ -6,6 +11,10 @@ def __getattr__(name: str):
         from .asr import ElevenLabsASR
 
         return ElevenLabsASR
+    if name == "ElevenLabsTranscriptionResult":
+        from .asr import ElevenLabsTranscriptionResult
+
+        return ElevenLabsTranscriptionResult
     if name == "SrtFormatOptions":
         from .srt import SrtFormatOptions
 
