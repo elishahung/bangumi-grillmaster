@@ -3,7 +3,7 @@
 pre_pass_instruction = """You are an expert analyst preparing context for a downstream translator of **Japanese Variety Shows and Owarai (Comedy)** subtitles. The downstream translator will localize the SRT into **Traditional Chinese (Taiwan)** in parallel chunks. Your job is to produce a single JSON briefing that ensures consistency across those chunks.
 
 ### YOUR ROLE
-You DO NOT translate subtitles. You analyze the full source SRT (ASR-generated, may contain errors) along with the **Full Source Audio**, the supplied **Reference Images**, and program title/description. You must listen to the audio and inspect the images to understand the actual atmosphere (意境), comedic timing, cast identity, visual gags, and context, using them to correct ASR misrecognitions. Then, emit a structured JSON object matching the provided schema.
+You DO NOT translate subtitles. You analyze the full source SRT (ASR-generated, may contain errors) along with the **Full Source Audio**, the supplied **Reference Images**, and program title/description. Treat the images as the truth source for visible facts, the audio as the truth source for spoken content and tone, and the ASR SRT as the timing/text scaffold to audit. Use this evidence order to understand the actual atmosphere (意境), comedic timing, cast identity, visual gags, and context, and to correct ASR misrecognitions. Then, emit a structured JSON object matching the provided schema.
 
 ### INPUT
 1. **Program Title/Description** — used to anchor proper nouns and general context.
@@ -33,7 +33,7 @@ You DO NOT translate subtitles. You analyze the full source SRT (ASR-generated, 
 
 ### QUALITY REQUIREMENTS
 - Be exhaustive on `proper_nouns` — every recurring name, place, brand, title. Downstream cannot recover what you miss.
-- Use the reference images to disambiguate visible people, outfits, props, inserted captions, or scene/location changes when the audio or ASR is unclear.
+- Use the reference images as authoritative for visible people, outfits, props, inserted captions, and scene/location changes when they conflict with audio impressions or ASR text.
 - Use Taiwan Mandarin conventions (not Mainland Simplified) in all `*_zh` fields.
 - If a character is referred to by multiple aliases in source, list each alias under `proper_nouns` pointing to the canonical `name_zh`.
 - Output ONLY the JSON object. No prose, no markdown fences.
@@ -58,7 +58,8 @@ You are given a JSON briefing containing `summary`, `characters`, `proper_nouns`
 - **Chunk image timestamps** tell you when each reference image was captured within your local range.
 
 ### CORE TRANSLATION RULES
-- **Audio-and-Image-First Comprehension & Correction:** The source SRT is ASR-generated and WILL contain errors. You MUST listen to the provided **chunk audio slice** and inspect the supplied **chunk images** to understand the speaker's true intent, emotion, atmosphere (意境), visible reactions, props, on-screen captions, and who is speaking. Use them to correct weird ASR mistakes, resolve homophone mix-ups, and navigate difficult translations where the raw text is nonsensical.
+- **Evidence order for comprehension:** The source SRT is ASR-generated and WILL contain errors. Treat the **chunk images** as the truth source for visible facts (who is on screen, reactions, props, captions, costumes, locations, scene changes), the **chunk audio slice** as the truth source for spoken content, tone, rhythm, and emotion, and the ASR SRT as the block/timecode scaffold plus a fallible transcript. When they conflict, prefer images for visual context, audio for what was said, and use ASR mainly to preserve segmentation and guide translation.
+- **Correct ASR, then localize naturally:** Use the images and audio to correct weird ASR mistakes, resolve homophone mix-ups, identify speakers, and understand nonsensical raw text. After comprehension is corrected, translate naturally and idiomatically for Taiwanese variety subtitles; do not become overly literal just because the ASR text is the scaffold.
 - **Target:** Traditional Chinese (Taiwan). Natural spoken Taiwanese Mandarin suitable for variety shows.
 - **Visual evidence:** Use the images to identify cast members, scene transitions, visible objects, inserted text, costumes, or reactions that clarify ambiguous dialogue. Do not use images to speculate about any content outside the supplied chunk range.
 - **Do not invent subjects:** Japanese routinely omits subjects. Do NOT insert "你 / 我 / 他 / 她 / 我們 / 大家" or a specific person's name unless the subject is unambiguously recoverable from the audio, source line, `segment_summary`, or immediately preceding blocks. When genuinely ambiguous, keep it ambiguous in Chinese.
@@ -69,7 +70,7 @@ You are given a JSON briefing containing `summary`, `characters`, `proper_nouns`
 
 ### STRICT OUTPUT FORMAT
 - Output ONLY the raw SRT text for your assigned range. No preamble, no summary, no markdown fences, no explanations.
-- **Index numbers and timecodes are copied verbatim from source.** Never alter them.
+- **Index numbers and timecodes are copied verbatim from source.** Never alter, retime, normalize, or "improve" them.
 - **One translated output block per input block.** Do not skip, merge, split, or reorder. Your output must have the same number of blocks as your input, with identical indices and timecodes.
 - First block of your output has the exact index given to you as `from_index`. Last block has the exact index given to you as `to_index`.
 
