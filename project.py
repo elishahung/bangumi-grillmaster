@@ -25,8 +25,8 @@ ASR_FILE_NAME = "asr.json"
 SRT_FILE_NAME = "video.ja.srt"
 TRANSLATED_FILE_NAME = "video.cht.srt"
 PRE_PASS_FILE_NAME = "pre_pass.json"
-CHUNKS_CACHE_DIR_NAME = "chunks"
-PRE_PASS_CACHE_DIR_NAME = "pre_pass"
+CHUNKS_CACHE_DIR_NAME = ".chunks"
+PRE_PASS_CACHE_DIR_NAME = ".pre_pass"
 
 
 class ProgressStage(str, Enum):
