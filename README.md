@@ -10,7 +10,7 @@
 
 - 設定偏好都是個人主觀，如需修改請自行 fork
 - 目標是 one shot 即可直接觀看，不想校準 (避免被暴雷)
-- 一小時左右的影片成本大概 15 台幣 (基本就是 gemini 的成本，ASR 很少)
+- 一小時左右的影片成本大概 $20 台幣 (ASR $6 + 翻譯 $14)
 
 ## 工具
 
@@ -129,10 +129,11 @@ GEMINI_MODEL=gemini-3-flash-preview
 GEMINI_THINKING_LEVEL=HIGH             # 翻譯 thinking level: LOW/MEDIUM/HIGH
 GEMINI_PRE_PASS_MAX_FRAMES=10          # pre-pass 最多附幾張全片代表圖片
 GEMINI_PRE_PASS_FRAME_MAX_SIDE=768     # pre-pass 圖片最長邊尺寸
-GEMINI_CHUNK_CHAR_LIMIT=6000          # 每塊目標字元數 (約 5 分鐘字幕)
+GEMINI_CHUNK_CHAR_LIMIT=6000           # 每塊目標字元數 (約 5 分鐘字幕)
 GEMINI_CONCURRENCY=10                  # chunk 併發上限
+GEMINI_FILE_CONCURRENCY=10             # Gemini Files API 查詢/上傳併發上限
 GEMINI_CHUNK_MAX_RETRIES=3             # chunk 失敗重試次數
-GEMINI_CHUNK_FRAME_INTERVAL_SECONDS=30   # chunk 圖片抽樣頻率（每幾秒一張）
+GEMINI_CHUNK_FRAME_INTERVAL_SECONDS=30 # chunk 圖片抽樣頻率（每幾秒一張）
 GEMINI_CHUNK_FRAME_MAX_SIDE=768        # chunk 圖片最長邊尺寸
 
 # 可選

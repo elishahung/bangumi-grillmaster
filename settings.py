@@ -73,6 +73,10 @@ class Settings(BaseSettings):
         default=10,
         description="Maximum number of concurrent chunk translation requests to Gemini",
     )
+    gemini_file_concurrency: int = Field(
+        default=10,
+        description="Maximum number of concurrent Gemini Files API get/upload operations",
+    )
     gemini_chunk_max_retries: int = Field(
         default=3,
         description="Maximum retry attempts per chunk on translation failure",

@@ -160,7 +160,7 @@ async def run_pre_pass(
     total_cost = 0.0
     for attempt in range(1, max_retries + 1):
         try:
-            frame_files = storage.ensure_files(
+            frame_files = await storage.ensure_files(
                 [
                     GeminiFileRef(
                         key=frame.storage_key,

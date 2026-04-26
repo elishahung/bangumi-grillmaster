@@ -269,7 +269,7 @@ async def translate_chunk(
 
         max_retries = settings.gemini_chunk_max_retries
         last_error: Exception | None = None
-        gemini_inputs = storage.ensure_files(
+        gemini_inputs = await storage.ensure_files(
             [
                 media_assets.audio,
                 *[

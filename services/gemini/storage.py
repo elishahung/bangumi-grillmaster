@@ -3,6 +3,7 @@ from settings import settings
 from pathlib import Path
 from loguru import logger
 import hashlib
+import asyncio
 from pydantic import BaseModel
 
 
@@ -26,7 +27,19 @@ class GeminiStorage:
         """
         logger.debug("Initializing Gemini storage client")
         self.client = client
+        self._file_semaphore: asyncio.Semaphore | None = None
+        self._file_semaphore_limit: int | None = None
         logger.info("Gemini storage client initialized successfully")
+
+    def _get_file_semaphore(self) -> asyncio.Semaphore:
+        concurrency = max(1, settings.gemini_file_concurrency)
+        if (
+            self._file_semaphore is None
+            or self._file_semaphore_limit != concurrency
+        ):
+            self._file_semaphore = asyncio.Semaphore(concurrency)
+            self._file_semaphore_limit = concurrency
+        return self._file_semaphore
 
     @staticmethod
     def convert_key_to_storage_name(key: str) -> str:
@@ -125,9 +138,26 @@ class GeminiStorage:
         )
         return self.upload_file(storage_name, file_path, mime_type)
 
-    def ensure_files(self, refs: list[GeminiFileRef]) -> list[genai.types.File]:
-        """Ensure multiple files exist in Gemini storage in input order."""
-        return [
-            self.ensure_file(ref.key, ref.file_path, ref.mime_type)
-            for ref in refs
-        ]
+    async def ensure_files(
+        self, refs: list[GeminiFileRef]
+    ) -> list[genai.types.File]:
+        """Ensure multiple files exist in Gemini storage concurrently in input order."""
+        if not refs:
+            return []
+
+        concurrency = max(1, settings.gemini_file_concurrency)
+        semaphore = self._get_file_semaphore()
+        logger.info(
+            f"Ensuring {len(refs)} Gemini file(s) with concurrency={concurrency}"
+        )
+
+        async def ensure_one(ref: GeminiFileRef):
+            async with semaphore:
+                return await asyncio.to_thread(
+                    self.ensure_file,
+                    ref.key,
+                    ref.file_path,
+                    ref.mime_type,
+                )
+
+        return await asyncio.gather(*(ensure_one(ref) for ref in refs))
