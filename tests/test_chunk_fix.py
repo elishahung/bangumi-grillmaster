@@ -58,7 +58,7 @@ def make_response(
     )
 
 
-class ChunkFixTimeoutTests(unittest.IsolatedAsyncioTestCase):
+class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         FakeAsyncOpenAI.response = None
         FakeAsyncOpenAI.create_calls = []
@@ -85,7 +85,7 @@ class ChunkFixTimeoutTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.accumulated_cost, 0.0)
         self.assertIn("timed out", str(raised.exception))
 
-    async def test_fix_chunk_structure_uses_deepseek_with_max_effort_and_cost(self):
+    async def test_fix_chunk_structure_uses_deepseek_with_high_effort_and_cost(self):
         FakeAsyncOpenAI.response = make_response(
             content="fixed",
             cache_hit_tokens=1000,
@@ -117,7 +117,7 @@ class ChunkFixTimeoutTests(unittest.IsolatedAsyncioTestCase):
         )
         create_call = FakeAsyncOpenAI.create_calls[0]
         self.assertEqual(create_call["model"], "deepseek-v4-flash")
-        self.assertEqual(create_call["reasoning_effort"], "max")
+        self.assertEqual(create_call["reasoning_effort"], "high")
         self.assertEqual(
             create_call["extra_body"], {"thinking": {"type": "enabled"}}
         )
@@ -125,6 +125,60 @@ class ChunkFixTimeoutTests(unittest.IsolatedAsyncioTestCase):
             (1000 / 1_000_000) * 0.0028
             + (2000 / 1_000_000) * 0.14
             + (3000 / 1_000_000) * 0.28
+        )
+        self.assertAlmostEqual(cost, expected_cost)
+
+    async def test_validation_failure_escalates_retry_to_max_effort(self):
+        responses = [
+            make_response(
+                content="still broken",
+                cache_miss_tokens=1000,
+                completion_tokens=1000,
+            ),
+            make_response(
+                content="fixed",
+                cache_miss_tokens=2000,
+                completion_tokens=2000,
+            ),
+        ]
+
+        async def create_with_responses(self, **kwargs):
+            self.create_calls.append(kwargs)
+            return responses.pop(0)
+
+        validate_calls = []
+
+        def validate(text: str) -> None:
+            validate_calls.append(text)
+            if text == "still broken":
+                raise ValueError("still invalid")
+
+        with (
+            patch.object(chunk_fix, "AsyncOpenAI", FakeAsyncOpenAI),
+            patch.object(FakeAsyncOpenAI, "_create", create_with_responses),
+            patch.object(chunk_fix.settings, "llm_chunk_fix_max_retries", 2),
+            patch.object(chunk_fix.settings, "deepseek_api_key", "test-key"),
+            patch("services.llm.chunk_fix.asyncio.sleep", return_value=None),
+        ):
+            text, cost = await chunk_fix.fix_chunk_structure(
+                "1\n00:00:00,000 --> 00:00:01,000\nsource",
+                "broken",
+                "invalid structure",
+                validate,
+                "[test]",
+            )
+
+        self.assertEqual(text, "fixed")
+        self.assertEqual(validate_calls, ["still broken", "fixed"])
+        self.assertEqual(
+            [call["reasoning_effort"] for call in FakeAsyncOpenAI.create_calls],
+            ["high", "max"],
+        )
+        expected_cost = (
+            (1000 / 1_000_000) * 0.14
+            + (1000 / 1_000_000) * 0.28
+            + (2000 / 1_000_000) * 0.14
+            + (2000 / 1_000_000) * 0.28
         )
         self.assertAlmostEqual(cost, expected_cost)
 

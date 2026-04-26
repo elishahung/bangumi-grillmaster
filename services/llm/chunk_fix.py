@@ -103,12 +103,17 @@ def _calculate_deepseek_cost(response, log_prefix: str) -> float:
 
 
 async def _call_once(
-    source_srt: str, broken_output: str, error: str, log_prefix: str
+    source_srt: str,
+    broken_output: str,
+    error: str,
+    reasoning_effort: str,
+    log_prefix: str,
 ) -> tuple[str, float]:
     """Single repair call. Raises RuntimeError on non-stop finish reason."""
     user_message = _build_user_message(source_srt, broken_output, error)
     logger.info(
-        f"{log_prefix} Attempting structural fix via {DEEPSEEK_CHUNK_FIX_MODEL}"
+        f"{log_prefix} Attempting structural fix via "
+        f"{DEEPSEEK_CHUNK_FIX_MODEL} (effort={reasoning_effort})"
     )
 
     client = AsyncOpenAI(
@@ -119,7 +124,7 @@ async def _call_once(
     response = await _await_with_manual_timeout(
         client.chat.completions.create(
             model=DEEPSEEK_CHUNK_FIX_MODEL,
-            reasoning_effort="max",
+            reasoning_effort=reasoning_effort,
             extra_body={"thinking": {"type": "enabled"}},
             messages=[
                 {"role": "system", "content": chunk_fix_instruction},
@@ -166,12 +171,17 @@ async def fix_chunk_structure(
     total_cost = 0.0
     current_broken = broken_output
     current_error = error
+    reasoning_effort = "high"
     last_exception: Exception | None = None
 
     for attempt in range(1, max_retries + 1):
         try:
             text, cost = await _call_once(
-                source_srt, current_broken, current_error, log_prefix
+                source_srt,
+                current_broken,
+                current_error,
+                reasoning_effort,
+                log_prefix,
             )
             total_cost += cost
             try:
@@ -183,6 +193,7 @@ async def fix_chunk_structure(
                 )
                 current_broken = text
                 current_error = str(validation_error)
+                reasoning_effort = "max"
                 last_exception = validation_error
             else:
                 return text, total_cost
