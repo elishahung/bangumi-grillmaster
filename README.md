@@ -22,7 +22,7 @@
 
 ### 翻譯
 
-測試多種模型還是 Gemini 的潤飾最能抓住日本綜藝的韻味，加上圖片音檔的理解真的很好，但 Gemini 的輸出常常會漏 Index 或弄錯時間軸，所以如果驗證錯誤，會再用 `DeepSeek V4 Flash` 做修正
+測試多種模型還是 Gemini 的潤飾最能抓住日本綜藝的韻味，加上圖片音檔的理解真的很好，但 Gemini 的輸出常常會漏 Index 或弄錯時間軸，所以如果驗證錯誤，會透過 `DeepSeek V4 Flash` 做修正
 
 使用 Gemini 進行**兩階段併發翻譯**：
 
@@ -112,18 +112,23 @@ grill "https://www.bilibili.com/video/BV18KBJBeEmV"
 # ElevenLabs Speech to Text
 ELEVENLABS_API_KEY=xxx
 ELEVENLABS_STT_MODEL=scribe_v2
+ELEVENLABS_STT_LANGUAGE_CODE=jpn
 
 # 可選：ElevenLabs JSON -> SRT 格式轉換
 ELEVENLABS_SRT_MAX_CHARACTERS_PER_LINE=24
 ELEVENLABS_SRT_MAX_SEGMENT_CHARS=48
-ELEVENLABS_SRT_MAX_SEGMENT_DURATION_S=5.5
-ELEVENLABS_SRT_SEGMENT_ON_SILENCE_LONGER_THAN_S=0.7
-ELEVENLABS_SRT_MERGE_SPEAKER_TURNS_GAP_S=0.45
-ELEVENLABS_SRT_MAX_LINES_PER_BLOCK=2
+ELEVENLABS_SRT_MAX_SEGMENT_DURATION_S=4
+ELEVENLABS_SRT_SEGMENT_ON_SILENCE_LONGER_THAN_S=0.5
+ELEVENLABS_SRT_MERGE_SPEAKER_TURNS_GAP_S=0.1
+ELEVENLABS_SRT_MAX_LINES_PER_BLOCK=3
 
 # Google Gemini (翻譯)
 GEMINI_API_KEY=xxx
 GEMINI_MODEL=gemini-3-flash-preview
+
+# DeepSeek (chunk 結構修正)
+DEEPSEEK_API_KEY=xxx
+LLM_CHUNK_FIX_MAX_RETRIES=3            # 修正失敗重試次數
 
 # 可選：Gemini 翻譯調校
 GEMINI_THINKING_LEVEL=HIGH             # 翻譯 thinking level: LOW/MEDIUM/HIGH
@@ -134,6 +139,7 @@ GEMINI_CONCURRENCY=10                  # chunk 併發上限
 GEMINI_CHUNK_MAX_RETRIES=3             # chunk 失敗重試次數
 GEMINI_CHUNK_FRAME_INTERVAL_SECONDS=30 # chunk 圖片抽樣頻率（每幾秒一張）
 GEMINI_CHUNK_FRAME_MAX_SIDE=768        # chunk 圖片最長邊尺寸
+GEMINI_CHUNK_MISSING_BLOCK_TOLERANCE=2 # 每塊允許未對齊/缺漏字幕區塊數上限
 
 # 可選
 COOKIES_TXT_PATH=cookies.txt   # 影片來源網站 cookies (供 yt-dlp 使用)

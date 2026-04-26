@@ -1,4 +1,4 @@
-"""Structural repair for chunk SRT outputs via any litellm-supported provider.
+"""Structural repair for chunk SRT outputs via DeepSeek.
 
 Given a source SRT slice (authoritative index/timecode) and a broken translator
 output, call an LLM to re-align blocks without changing translation wording.
@@ -7,14 +7,25 @@ output, call an LLM to re-align blocks without changing translation wording.
 import asyncio
 from typing import Callable
 
-from litellm import acompletion, completion_cost
 from loguru import logger
+from openai import AsyncOpenAI
 
 from settings import settings
 from services.gemini.errors import ChunkFixError
 from .instructions import chunk_fix_instruction
 
-LITELLM_TIMEOUT_SECONDS = 6 * 60
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_CHUNK_FIX_MODEL = "deepseek-v4-flash"
+DEEPSEEK_TIMEOUT_SECONDS = 6 * 60
+DEEPSEEK_PRICE_PER_1M_CACHE_HIT_INPUT = 0.0028
+DEEPSEEK_PRICE_PER_1M_CACHE_MISS_INPUT = 0.14
+DEEPSEEK_PRICE_PER_1M_OUTPUT = 0.28
+
+
+class _ChunkFixCallError(RuntimeError):
+    def __init__(self, message: str, accumulated_cost: float = 0.0):
+        super().__init__(message)
+        self.accumulated_cost = accumulated_cost
 
 
 def _drain_cancelled_task(task: asyncio.Task) -> None:
@@ -44,42 +55,91 @@ def _build_user_message(source_srt: str, broken_output: str, error: str) -> str:
     )
 
 
+def _get_usage_int(usage, field: str) -> int:
+    value = getattr(usage, field, 0) or 0
+    return int(value)
+
+
+def _calculate_deepseek_cost(response, log_prefix: str) -> float:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        logger.warning(f"{log_prefix} DeepSeek usage metadata is missing")
+        return 0.0
+
+    cache_hit_input_tokens = _get_usage_int(usage, "prompt_cache_hit_tokens")
+    cache_miss_input_tokens = _get_usage_int(usage, "prompt_cache_miss_tokens")
+    output_tokens = _get_usage_int(usage, "completion_tokens")
+    prompt_tokens = _get_usage_int(usage, "prompt_tokens")
+    total_tokens = _get_usage_int(usage, "total_tokens")
+
+    completion_details = getattr(usage, "completion_tokens_details", None)
+    reasoning_tokens = (
+        _get_usage_int(completion_details, "reasoning_tokens")
+        if completion_details is not None
+        else 0
+    )
+
+    cost_cache_hit = (
+        cache_hit_input_tokens / 1_000_000
+    ) * DEEPSEEK_PRICE_PER_1M_CACHE_HIT_INPUT
+    cost_cache_miss = (
+        cache_miss_input_tokens / 1_000_000
+    ) * DEEPSEEK_PRICE_PER_1M_CACHE_MISS_INPUT
+    cost_output = (output_tokens / 1_000_000) * DEEPSEEK_PRICE_PER_1M_OUTPUT
+    total_cost = cost_cache_hit + cost_cache_miss + cost_output
+
+    logger.info(f"{log_prefix} --- DeepSeek cost breakdown ---")
+    logger.info(
+        f"{log_prefix} Prompt tokens: {prompt_tokens} "
+        f"(cache hit {cache_hit_input_tokens}, cache miss {cache_miss_input_tokens})"
+    )
+    logger.info(
+        f"{log_prefix} Output tokens: {output_tokens} "
+        f"(reasoning {reasoning_tokens}, total {total_tokens})"
+    )
+    logger.info(f"{log_prefix} DeepSeek fix cost: ${total_cost:.6f} USD")
+
+    return total_cost
+
+
 async def _call_once(
     source_srt: str, broken_output: str, error: str, log_prefix: str
 ) -> tuple[str, float]:
     """Single repair call. Raises RuntimeError on non-stop finish reason."""
-    model = settings.llm_chunk_fix_model
     user_message = _build_user_message(source_srt, broken_output, error)
-    logger.info(f"{log_prefix} Attempting structural fix via {model}")
+    logger.info(
+        f"{log_prefix} Attempting structural fix via {DEEPSEEK_CHUNK_FIX_MODEL}"
+    )
+
+    client = AsyncOpenAI(
+        api_key=settings.deepseek_api_key,
+        base_url=DEEPSEEK_BASE_URL,
+    )
 
     response = await _await_with_manual_timeout(
-        acompletion(
-            model=model,
-            api_key=settings.llm_api_key,
-            timeout=LITELLM_TIMEOUT_SECONDS,
+        client.chat.completions.create(
+            model=DEEPSEEK_CHUNK_FIX_MODEL,
+            reasoning_effort="max",
+            extra_body={"thinking": {"type": "enabled"}},
             messages=[
                 {"role": "system", "content": chunk_fix_instruction},
                 {"role": "user", "content": user_message},
             ],
         ),
-        LITELLM_TIMEOUT_SECONDS,
-        "Chunk fix litellm call",
+        DEEPSEEK_TIMEOUT_SECONDS,
+        "Chunk fix DeepSeek call",
     )
 
     choice = response.choices[0]
     finish_reason = choice.finish_reason
+    cost = _calculate_deepseek_cost(response, log_prefix)
     if finish_reason != "stop":
-        raise RuntimeError(
-            f"Fix non-stop finish reason: {finish_reason} (likely length)"
+        raise _ChunkFixCallError(
+            f"Fix non-stop finish reason: {finish_reason} (likely length)",
+            accumulated_cost=cost,
         )
 
     text = choice.message.content or ""
-
-    try:
-        cost = float(completion_cost(completion_response=response) or 0.0)
-    except Exception as e:
-        logger.warning(f"{log_prefix} Failed to compute fix cost: {e}")
-        cost = 0.0
 
     logger.info(f"{log_prefix} Fix call completed (${cost:.4f})")
     return text, cost
@@ -127,6 +187,8 @@ async def fix_chunk_structure(
             else:
                 return text, total_cost
         except Exception as e:
+            if isinstance(e, _ChunkFixCallError):
+                total_cost += e.accumulated_cost
             last_exception = e
             logger.warning(
                 f"{log_prefix} Fix attempt {attempt}/{max_retries} errored: {e}"

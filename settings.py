@@ -90,13 +90,9 @@ class Settings(BaseSettings):
         description="Maximum number of unmatched/missing subtitle blocks allowed per translated chunk before structural validation fails",
     )
 
-    # --- Translation: structural fix (litellm, non-Gemini) -------------------
-    llm_api_key: str = Field(
-        description="API key forwarded to litellm for non-Gemini LLM calls (e.g., OpenRouter for the chunk-fix model)"
-    )
-    llm_chunk_fix_model: str = Field(
-        default="openrouter/deepseek/deepseek-v4-flash",
-        description="litellm model string used to repair chunk outputs that fail structural validation before falling back to a full chunk retry",
+    # --- Translation: structural fix (DeepSeek, non-Gemini) ------------------
+    deepseek_api_key: str = Field(
+        description="DeepSeek API key used by the chunk structural fix layer",
     )
     llm_chunk_fix_max_retries: int = Field(
         default=3,
