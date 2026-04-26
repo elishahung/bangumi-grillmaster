@@ -10,13 +10,12 @@ from pydantic import BaseModel
 
 from settings import settings
 from services.llm.chunk_fix import fix_chunk_structure
-from .assets import ChunkMediaAssets
+from .assets import ChunkMediaAssets, media_refs_to_parts
 from .chunker import SrtBlock, parse_srt
 from .cost import calculate_cost
 from .errors import ChunkFixError, ChunkTranslationError
 from .instructions import chunk_instruction
 from .pre_pass import PrePassResult, SegmentSummary
-from .storage import GeminiFileRef, GeminiStorage
 
 
 class ChunkTranslationResult(BaseModel):
@@ -207,7 +206,6 @@ def _write_chunk_manifest(
 
 async def translate_chunk(
     client: genai.Client,
-    storage: GeminiStorage,
     media_assets: ChunkMediaAssets,
     chunk: list[SrtBlock],
     chunk_index: int,
@@ -269,18 +267,8 @@ async def translate_chunk(
 
         max_retries = settings.gemini_chunk_max_retries
         last_error: Exception | None = None
-        gemini_inputs = await storage.ensure_files(
-            [
-                media_assets.audio,
-                *[
-                    GeminiFileRef(
-                        key=frame.storage_key,
-                        file_path=frame.path,
-                        mime_type=frame.mime_type,
-                    )
-                    for frame in media_assets.frames
-                ],
-            ]
+        media_parts = media_refs_to_parts(
+            [media_assets.audio, *media_assets.frames]
         )
 
         for attempt in range(1, max_retries + 1):
@@ -291,7 +279,7 @@ async def translate_chunk(
                 )
                 response = await client.aio.models.generate_content(
                     model=settings.gemini_model,
-                    contents=[*gemini_inputs, user_message],
+                    contents=[*media_parts, user_message],
                     config=config,
                 )
                 api_cost += calculate_cost(

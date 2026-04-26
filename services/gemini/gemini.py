@@ -19,7 +19,6 @@ from .errors import (
     TranslationCostSummary,
 )
 from .pre_pass import run_pre_pass
-from .storage import GeminiStorage
 
 
 class TranslationResult(TranslationCostSummary):
@@ -37,7 +36,6 @@ class Gemini:
     def __init__(self):
         logger.debug("Initializing Gemini client")
         self.client = genai.Client(api_key=settings.gemini_api_key)
-        self.storage = GeminiStorage(self.client)
         logger.info(
             f"Gemini client initialized "
             f"(concurrency={settings.gemini_concurrency}, "
@@ -59,7 +57,7 @@ class Gemini:
         """Translate an SRT file to Traditional Chinese. Blocks until complete.
 
         Pre-pass and per-chunk multimodal assets are cached on disk so a later
-        retry can resume without rebuilding media slices or re-uploading files.
+        retry can resume without rebuilding media slices.
         """
         return asyncio.run(
             self._translate_async(
@@ -111,9 +109,6 @@ class Gemini:
         logger.info(f"Starting translation for SRT file: {srt_path}")
 
         srt_text = srt_path.read_text(encoding="utf-8")
-        audio_file = self.storage.ensure_file(
-            audio_key, audio_path, "audio/ogg"
-        )
         blocks = parse_srt(srt_text)
         logger.info(f"Parsed {len(blocks)} SRT blocks")
 
@@ -132,12 +127,10 @@ class Gemini:
         try:
             pre_pass_result, pre_pass_cost = await run_pre_pass(
                 self.client,
-                self.storage,
                 video_description,
                 srt_text,
                 video_path,
-                audio_key,
-                audio_file,
+                audio_path,
                 chunks,
                 pre_pass_path,
                 pre_pass_cache_dir,
@@ -176,7 +169,6 @@ class Gemini:
                 )
                 return await translate_chunk(
                     self.client,
-                    self.storage,
                     chunk_assets,
                     chunk,
                     i,

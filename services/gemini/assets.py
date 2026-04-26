@@ -4,37 +4,54 @@ import hashlib
 import json
 from pathlib import Path
 
+from google import genai
 from pydantic import BaseModel
 
 from services.media import MediaProcessor, TimeRange
 from .chunker import SrtBlock
-from .storage import GeminiFileRef
 
 
-class FrameSpec(BaseModel):
-    timestamp_seconds: float
+class LocalMediaRef(BaseModel):
     path: Path
-    storage_key: str
+    mime_type: str
+
+
+class FrameSpec(LocalMediaRef):
+    timestamp_seconds: float
     mime_type: str = "image/jpeg"
 
 
 class ChunkMediaAssets(BaseModel):
     time_range: TimeRange
-    audio: GeminiFileRef
+    audio: LocalMediaRef
     frames: list[FrameSpec]
     manifest_path: Path
     response_dir: Path
 
 
 class PrePassMediaAssets(BaseModel):
+    audio: LocalMediaRef
     frames: list[FrameSpec]
     manifest_path: Path
 
 
+def media_ref_to_part(ref: LocalMediaRef) -> genai.types.Part:
+    if not ref.path.exists():
+        raise FileNotFoundError(f"Gemini media file not found: {ref.path}")
+    return genai.types.Part.from_bytes(
+        data=ref.path.read_bytes(),
+        mime_type=ref.mime_type,
+    )
+
+
+def media_refs_to_parts(refs: list[LocalMediaRef]) -> list[genai.types.Part]:
+    return [media_ref_to_part(ref) for ref in refs]
+
+
 def prepare_pre_pass_media_assets(
     video_path: Path,
+    audio_path: Path,
     cache_root: Path,
-    video_key: str,
     max_frames: int,
     max_side: int,
 ) -> PrePassMediaAssets:
@@ -53,16 +70,15 @@ def prepare_pre_pass_media_assets(
             output_dir=frame_dir,
             timestamp_seconds=timestamp,
             max_side=max_side,
-            storage_key=(
-                f"{video_key}:pre-pass:frame:{timestamp:.3f}:max_side={max_side}"
-            ),
         )
         for timestamp in timestamps
     ]
+    audio_ref = LocalMediaRef(path=audio_path, mime_type="audio/ogg")
     manifest_path.write_text(
         json.dumps(
             {
                 "video_path": str(video_path),
+                "audio": audio_ref.model_dump(mode="json"),
                 "duration_seconds": duration,
                 "max_frames": max_frames,
                 "max_side": max_side,
@@ -70,7 +86,7 @@ def prepare_pre_pass_media_assets(
                     {
                         "timestamp_seconds": frame.timestamp_seconds,
                         "path": str(frame.path),
-                        "storage_key": frame.storage_key,
+                        "mime_type": frame.mime_type,
                     }
                     for frame in frames
                 ],
@@ -80,7 +96,9 @@ def prepare_pre_pass_media_assets(
         ),
         encoding="utf-8",
     )
-    return PrePassMediaAssets(frames=frames, manifest_path=manifest_path)
+    return PrePassMediaAssets(
+        audio=audio_ref, frames=frames, manifest_path=manifest_path
+    )
 
 
 def prepare_chunk_media_assets(
@@ -126,23 +144,13 @@ def prepare_chunk_media_assets(
         end_seconds=range_info.end_seconds,
     )
 
-    audio_ref = GeminiFileRef(
-        key=(
-            f"{video_key}:chunk-audio:{chunk_slug}:"
-            f"{range_info.start_seconds:.3f}:{range_info.end_seconds:.3f}"
-        ),
-        file_path=audio_output,
-        mime_type="audio/ogg",
-    )
+    audio_ref = LocalMediaRef(path=audio_output, mime_type="audio/ogg")
     frames = [
         _build_frame_asset(
             video_path=video_path,
             output_dir=frame_dir,
             timestamp_seconds=timestamp,
             max_side=max_side,
-            storage_key=(
-                f"{video_key}:chunk-frame:{timestamp:.3f}:max_side={max_side}"
-            ),
         )
         for timestamp in frame_timestamps
     ]
@@ -187,7 +195,6 @@ def _build_frame_asset(
     output_dir: Path,
     timestamp_seconds: float,
     max_side: int,
-    storage_key: str,
 ) -> FrameSpec:
     output_dir.mkdir(parents=True, exist_ok=True)
     filename = f"frame_{timestamp_seconds:010.3f}_{max_side}.jpg"
@@ -201,5 +208,4 @@ def _build_frame_asset(
     return FrameSpec(
         timestamp_seconds=timestamp_seconds,
         path=output_path,
-        storage_key=storage_key,
     )

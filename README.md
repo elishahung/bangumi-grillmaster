@@ -131,7 +131,6 @@ GEMINI_PRE_PASS_MAX_FRAMES=10          # pre-pass 最多附幾張全片代表圖
 GEMINI_PRE_PASS_FRAME_MAX_SIDE=768     # pre-pass 圖片最長邊尺寸
 GEMINI_CHUNK_CHAR_LIMIT=6000           # 每塊目標字元數 (約 5 分鐘字幕)
 GEMINI_CONCURRENCY=10                  # chunk 併發上限
-GEMINI_FILE_CONCURRENCY=10             # Gemini Files API 查詢/上傳併發上限
 GEMINI_CHUNK_MAX_RETRIES=3             # chunk 失敗重試次數
 GEMINI_CHUNK_FRAME_INTERVAL_SECONDS=30 # chunk 圖片抽樣頻率（每幾秒一張）
 GEMINI_CHUNK_FRAME_MAX_SIDE=768        # chunk 圖片最長邊尺寸

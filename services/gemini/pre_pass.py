@@ -9,12 +9,11 @@ from loguru import logger
 from pydantic import BaseModel
 
 from settings import settings
-from .assets import prepare_pre_pass_media_assets
+from .assets import media_refs_to_parts, prepare_pre_pass_media_assets
 from .chunker import SrtBlock
 from .cost import calculate_cost
 from .errors import PrePassError
 from .instructions import pre_pass_instruction
-from .storage import GeminiFileRef, GeminiStorage
 
 
 class Character(BaseModel):
@@ -73,12 +72,10 @@ def _build_user_message(
 
 async def run_pre_pass(
     client: genai.Client,
-    storage: GeminiStorage,
     video_description: str | None,
     srt_text: str,
     video_path: Path,
-    audio_key: str,
-    audio_file: genai.types.File,
+    audio_path: Path,
     chunks: list[list[SrtBlock]],
     pre_pass_path: Path,
     pre_pass_cache_dir: Path,
@@ -90,8 +87,8 @@ async def run_pre_pass(
     """
     pre_pass_assets = prepare_pre_pass_media_assets(
         video_path=video_path,
+        audio_path=audio_path,
         cache_root=pre_pass_cache_dir,
-        video_key=audio_key,
         max_frames=settings.gemini_pre_pass_max_frames,
         max_side=settings.gemini_pre_pass_frame_max_side,
     )
@@ -160,15 +157,8 @@ async def run_pre_pass(
     total_cost = 0.0
     for attempt in range(1, max_retries + 1):
         try:
-            frame_files = await storage.ensure_files(
-                [
-                    GeminiFileRef(
-                        key=frame.storage_key,
-                        file_path=frame.path,
-                        mime_type=frame.mime_type,
-                    )
-                    for frame in pre_pass_assets.frames
-                ]
+            media_parts = media_refs_to_parts(
+                [pre_pass_assets.audio, *pre_pass_assets.frames]
             )
             logger.info(
                 f"[pre-pass] Requesting analysis (attempt {attempt}/{max_retries}, "
@@ -176,11 +166,7 @@ async def run_pre_pass(
             )
             response = await client.aio.models.generate_content(
                 model=settings.gemini_model,
-                contents=[
-                    audio_file,
-                    *frame_files,
-                    user_message,
-                ],
+                contents=[*media_parts, user_message],
                 config=config,
             )
             cost = calculate_cost(
@@ -208,6 +194,9 @@ async def run_pre_pass(
                             frame.model_dump(mode="json")
                             for frame in pre_pass_assets.frames
                         ],
+                        "audio": pre_pass_assets.audio.model_dump(
+                            mode="json"
+                        ),
                         "asset_manifest_path": str(
                             pre_pass_assets.manifest_path
                         ),
