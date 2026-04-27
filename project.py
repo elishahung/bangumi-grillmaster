@@ -25,6 +25,7 @@ ASR_FILE_NAME = "asr.json"
 SRT_FILE_NAME = "video.ja.srt"
 TRANSLATED_FILE_NAME = "video.cht.srt"
 PRE_PASS_FILE_NAME = "pre_pass.json"
+ASR_CACHE_DIR_NAME = ".asr"
 CHUNKS_CACHE_DIR_NAME = ".chunks"
 PRE_PASS_CACHE_DIR_NAME = ".pre_pass"
 
@@ -377,18 +378,18 @@ class Project(BaseModel):
         """Get the path to the extracted audio file.
 
         Returns:
-            Path to audio.opus.
+            Path to .asr/audio.opus.
         """
-        return self.project_path / AUDIO_FILE_NAME
+        return self.asr_cache_dir / AUDIO_FILE_NAME
 
     @property
     def asr_path(self) -> Path:
         """Get the path to the ASR results JSON file.
 
         Returns:
-            Path to asr.json.
+            Path to .asr/asr.json.
         """
-        return self.project_path / ASR_FILE_NAME
+        return self.asr_cache_dir / ASR_FILE_NAME
 
     @property
     def srt_path(self) -> Path:
@@ -413,9 +414,14 @@ class Project(BaseModel):
         """Get the path to the cached Gemini pre-pass briefing JSON.
 
         Returns:
-            Path to pre_pass.json.
+            Path to .pre_pass/pre_pass.json.
         """
-        return self.project_path / PRE_PASS_FILE_NAME
+        return self.pre_pass_cache_dir / PRE_PASS_FILE_NAME
+
+    @property
+    def asr_cache_dir(self) -> Path:
+        """Get the directory for ASR audio and transcription artifacts."""
+        return self.project_path / ASR_CACHE_DIR_NAME
 
     @property
     def pre_pass_cache_dir(self) -> Path:

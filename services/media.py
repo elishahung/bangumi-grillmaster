@@ -49,6 +49,7 @@ class MediaProcessor:
         """
         logger.info(f"Extracting audio from video: {input_file}")
         try:
+            output_file.parent.mkdir(parents=True, exist_ok=True)
             ffmpeg.input(str(input_file)).output(
                 str(output_file),
                 ac=1,
