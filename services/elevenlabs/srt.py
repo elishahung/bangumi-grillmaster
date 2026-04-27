@@ -56,6 +56,8 @@ class SrtFormatOptions:
     max_overlapping_block_duration_s: float = 8.0
     max_utterances_per_block: int = 5
     max_lines_per_block: int = 2
+    inline_short_same_speaker_utterances: bool = True
+    max_inline_short_utterance_chars: int = 8
     min_segment_duration_s: float = 0.35
     split_on_punctuation: str = JAPANESE_HARD_PUNCTUATION
     soft_split_punctuation: str = JAPANESE_SOFT_PUNCTUATION
@@ -120,6 +122,8 @@ def convert_payload_to_srt(
     blocks = _merge_utterances_to_blocks(utterances, options)
     if options.merge_overlapping_blocks:
         blocks = _merge_overlapping_blocks(blocks, options)
+    if options.inline_short_same_speaker_utterances:
+        _inline_short_same_speaker_utterances(blocks, options)
     _resolve_block_overlaps(blocks, options)
     return _render_srt(blocks, options)
 
@@ -301,7 +305,10 @@ def _merge_overlapping_blocks(
             and len(previous.utterances) + len(block.utterances)
             <= options.max_utterances_per_block
             and _rendered_line_count(
-                [*previous.utterances, *block.utterances], options
+                _line_count_utterance_preview(
+                    [*previous.utterances, *block.utterances], options
+                ),
+                options,
             )
             <= options.max_lines_per_block
         ):
@@ -328,6 +335,84 @@ def _resolve_block_overlaps(
         current.start = previous.end
         if current.end <= current.start:
             current.end = current.start + options.min_segment_duration_s
+
+
+def _inline_short_same_speaker_utterances(
+    blocks: list[SubtitleBlock], options: SrtFormatOptions
+) -> None:
+    for block in blocks:
+        if len(block.utterances) < 2:
+            continue
+        if len({utterance.speaker_id for utterance in block.utterances}) != 1:
+            continue
+
+        inlined: list[Utterance] = []
+        for utterance in block.utterances:
+            if inlined and _can_inline_same_speaker_utterance(
+                inlined[-1], utterance, options
+            ):
+                inlined[-1].text = f"{inlined[-1].text} {utterance.text}"
+                inlined[-1].end = max(inlined[-1].end, utterance.end)
+            else:
+                inlined.append(utterance)
+        block.utterances = inlined
+
+
+def _line_count_utterance_preview(
+    utterances: list[Utterance], options: SrtFormatOptions
+) -> list[Utterance]:
+    if len({utterance.speaker_id for utterance in utterances}) != 1:
+        return utterances
+    return _inline_short_same_speaker_utterance_preview(utterances, options)
+
+
+def _inline_short_same_speaker_utterance_preview(
+    utterances: list[Utterance], options: SrtFormatOptions
+) -> list[Utterance]:
+    preview: list[Utterance] = []
+    for utterance in utterances:
+        copy = Utterance(
+            speaker_id=utterance.speaker_id,
+            start=utterance.start,
+            end=utterance.end,
+            text=utterance.text,
+        )
+        if preview and _can_inline_same_speaker_utterance(
+            preview[-1], copy, options
+        ):
+            preview[-1].text = f"{preview[-1].text} {copy.text}"
+            preview[-1].end = max(preview[-1].end, copy.end)
+        else:
+            preview.append(copy)
+    return preview
+
+
+def _can_inline_same_speaker_utterance(
+    left: Utterance, right: Utterance, options: SrtFormatOptions
+) -> bool:
+    if left.speaker_id != right.speaker_id:
+        return False
+    if not (
+        _is_short_inline_utterance(left, options)
+        and _is_short_inline_utterance(right, options)
+    ):
+        return False
+    gap = max(0.0, right.start - left.end)
+    if gap > options.merge_same_speaker_gap_s:
+        return False
+    combined_text = f"{left.text} {right.text}"
+    return len(combined_text) <= options.max_characters_per_line
+
+
+def _is_short_inline_utterance(
+    utterance: Utterance, options: SrtFormatOptions
+) -> bool:
+    text = utterance.text.strip()
+    return (
+        bool(text)
+        and len(text) <= options.max_inline_short_utterance_chars
+        and _ends_with_split_punctuation(text, options)
+    )
 
 
 def _can_merge_into_block(

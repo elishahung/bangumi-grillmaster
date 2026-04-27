@@ -158,6 +158,35 @@ class ElevenLabsSrtTests(unittest.TestCase):
         self.assertIn("3\n00:00:00,800 --> 00:00:01,150\n-四。\n-五。", srt)
         self.assertIn("4\n00:00:01,150 --> 00:00:01,500\n六。", srt)
 
+    def test_inlines_short_repeated_same_speaker_utterances(self):
+        payload = {
+            "words": [
+                word("何", 1320.72, 1320.88, "speaker_8"),
+                word("？", 1320.88, 1320.9, "speaker_8"),
+                word("何", 1320.9, 1320.91, "speaker_8"),
+                word("？", 1320.91, 1321.02, "speaker_8"),
+                word("何", 1321.02, 1321.52, "speaker_8"),
+                word("？", 1321.52, 1323.22, "speaker_8"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("1\n00:22:00,720 --> 00:22:03,220\n何？ 何？ 何？", srt)
+        self.assertNotIn("何？\n何？\n何？", srt)
+
+    def test_keeps_long_same_speaker_utterances_stacked_after_overlap_merge(self):
+        payload = {
+            "words": [
+                word("これは長めの質問です？", 0.0, 0.2, "speaker_0"),
+                word("これも長めの返答です。", 0.2, 0.4, "speaker_0"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("これは長めの質問です？\nこれも長めの返答です。", srt)
+
     def test_does_not_merge_reply_when_dialogue_would_exceed_two_lines(self):
         payload = {
             "words": [
