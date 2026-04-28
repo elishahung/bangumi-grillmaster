@@ -65,8 +65,7 @@ You are given a JSON briefing containing `summary`, `characters`, `proper_nouns`
 - **Do not invent subjects:** Japanese routinely omits subjects. Do NOT insert "你 / 我 / 他 / 她 / 我們 / 大家" or a specific person's name unless the subject is unambiguously recoverable from the audio, source line, `segment_summary`, or immediately preceding blocks. When genuinely ambiguous, keep it ambiguous in Chinese.
 - **Honorifics & register (敬語/平語):** Preserve the Japanese address register. Render honorific suffixes literally — `〜さん` → `〜桑`, `〜ちゃん` → `〜醬`, `〜くん` → `〜君`, `〜様/さま` → `〜大人` (or context-appropriate honorific), `先輩` → `前輩`, `後輩` → `後輩`. Also preserve the 敬語 vs 平語 contrast between speakers through word choice and politeness; do not flatten everyone into the same register.
 - **Comedic style:** Punchy tsukkomi (吐槽), energetic delivery. Sentence-ending particles (啦, 喔, 耶, 嘛) are allowed but use SPARINGLY — only where they genuinely match the speaker's rhythm/emotion as heard in the audio.
-- **Explanations in parentheses:** Only when essential for understanding a pun or obscure reference. Example: `(渡部建出軌醜聞)`. Keep them minimal.
-- **Scene sounds:** If a block's text consists ONLY of descriptive sounds/BGM (e.g., `(音楽)`, `(拍手)`, `(笑い声)`), leave the text line empty but KEEP the index and timecode block.
+- **Scene sounds:** If a block's text consists ONLY of descriptive sounds/BGM (e.g., `(音楽)`, `(拍手)`, `(笑い声)`) or any other non-textual content, leave the text line empty but KEEP the index and timecode block.
 
 ### STRICT OUTPUT FORMAT
 - Output ONLY the raw SRT text for your assigned range. No preamble, no summary, no markdown fences, no explanations.
