@@ -28,6 +28,7 @@ class WorkflowGeminiCostTests(unittest.TestCase):
         project.pre_pass_path = base / ".pre_pass" / "pre_pass.json"
         project.pre_pass_cache_dir = base / ".pre_pass"
         project.chunks_cache_dir = base / ".chunks"
+        project.source_metadata_context.return_value = None
         return project
 
     def test_workflow_persists_gemini_cost_on_success(self):
@@ -54,6 +55,10 @@ class WorkflowGeminiCostTests(unittest.TestCase):
             workflow_module.process_project("demo")
 
         project.add_cost.assert_called_once_with("gemini", 3.5)
+        request = gemini_cls.return_value.translate.call_args.args[0]
+        self.assertEqual(request.video_description, "hint")
+        self.assertEqual(request.audio_key, "demo")
+        self.assertEqual(request.srt_path, project.srt_path)
         project.mark_progress.assert_called_once_with(
             workflow_module.ProgressStage.TRANSLATED
         )

@@ -5,6 +5,6 @@ sources using yt-dlp, with integrated logging and metadata extraction.
 """
 
 from .download import download_video
-from .info import get_video_info
+from .info import get_tver_episode_talents, get_video_info
 
-__all__ = ["download_video", "get_video_info"]
+__all__ = ["download_video", "get_tver_episode_talents", "get_video_info"]

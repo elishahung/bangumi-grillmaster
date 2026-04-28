@@ -15,7 +15,7 @@ from loguru import logger
 from settings import settings
 import re
 from urllib.parse import urlparse
-from services.ytdlp.info import YtDlpVideoInfo
+from services.ytdlp.info import TVerTalent, YtDlpVideoInfo
 
 PROJECT_ROOT_NAME = "projects"
 PROJECT_FILE_NAME = "project.json"
@@ -54,6 +54,21 @@ class VideoSource(str, Enum):
     ABEMA = "abema"
 
 
+class SourceTalent(BaseModel):
+    """Person or group metadata supplied by the video source."""
+
+    id: str
+    name: str
+    name_kana: str | None = None
+    roles: list[str] = Field(default_factory=list)
+
+
+class SourceMetadata(BaseModel):
+    """Optional metadata collected from the source platform."""
+
+    talents: list[SourceTalent] = Field(default_factory=list)
+
+
 class Project(BaseModel):
     """Represents a video captioning project with progress tracking.
 
@@ -77,6 +92,7 @@ class Project(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     name: str = Field(default="video")
     translation_hint: str | None = None
+    source_metadata: SourceMetadata = Field(default_factory=SourceMetadata)
     total_cost: float = 0.0
     service_costs: dict[str, float] = Field(default_factory=dict)
 
@@ -200,6 +216,31 @@ class Project(BaseModel):
                     f"{video_info.title} - {video_info.description}"
                 )
         self.save()
+
+    def update_from_tver_talents(self, talents: list[TVerTalent]) -> None:
+        """Persist TVer talent metadata on the project."""
+        self.source_metadata.talents = [
+            SourceTalent(
+                id=talent.id,
+                name=talent.name,
+                name_kana=talent.name_kana,
+                roles=talent.roles,
+            )
+            for talent in talents
+        ]
+        self.save()
+
+    def source_metadata_context(self) -> str | None:
+        """Return source metadata formatted for Gemini prompt context."""
+        if not self.source_metadata.talents:
+            return None
+
+        lines = ["Official source cast/talent metadata:"]
+        for talent in self.source_metadata.talents:
+            role_text = f" ({', '.join(talent.roles)})" if talent.roles else ""
+            kana_text = f" / {talent.name_kana}" if talent.name_kana else ""
+            lines.append(f"- {talent.name}{kana_text}{role_text}")
+        return "\n".join(lines)
 
     def save(self) -> None:
         """Save the current project state to disk as JSON.

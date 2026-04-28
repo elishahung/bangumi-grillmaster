@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import project as project_module
 from project import Project
+from services.ytdlp.info import TVerTalent
 
 
 class ProjectTests(unittest.TestCase):
@@ -72,6 +73,33 @@ class ProjectTests(unittest.TestCase):
                 project.pre_pass_path,
                 root / "layout-project" / ".pre_pass" / "pre_pass.json",
             )
+
+    def test_tver_talents_persist_in_project_metadata_context(self):
+        root = self._make_temp_dir()
+        with patch.object(project_module, "PROJECT_ROOT_NAME", str(root)):
+            project = Project(id="epmetadata1", name="demo")
+            project.update_from_tver_talents(
+                [
+                    TVerTalent(
+                        id="t001",
+                        name="濱家　隆一",
+                        name_kana="ハマイエ　リュウイチ",
+                        roles=["お笑い芸人"],
+                    )
+                ]
+            )
+
+            persisted = json.loads(
+                project.json_path.read_text(encoding="utf-8")
+            )
+            context = project.source_metadata_context()
+
+        self.assertEqual(
+            persisted["source_metadata"]["talents"][0]["name"],
+            "濱家　隆一",
+        )
+        self.assertIn("濱家　隆一 / ハマイエ　リュウイチ", context)
+        self.assertIn("お笑い芸人", context)
 
 
 if __name__ == "__main__":

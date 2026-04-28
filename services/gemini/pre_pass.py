@@ -16,6 +16,23 @@ from .errors import PrePassError
 from .instructions import pre_pass_instruction
 
 
+OFFICIAL_SOURCE_METADATA_INSTRUCTION = """### OFFICIAL SOURCE METADATA
+The user message includes official source metadata such as cast/talent names
+from the distribution platform.
+
+When official source cast/talent metadata is present:
+- `characters` MUST include every listed cast/talent entry.
+- Preserve each official source name exactly as written in `name_jp`; do not
+  normalize spacing, convert script, rewrite kanji/kana, or replace it with an
+  ASR spelling.
+- Use the official source names as authoritative anchors for identifying
+  recurring people and correcting ASR name errors.
+- If audio, images, or ASR appear to conflict with the official source spelling,
+  keep the official source spelling in `characters.name_jp` and put aliases or
+  ASR corrections in `proper_nouns`.
+"""
+
+
 class Character(BaseModel):
     name_jp: str
     name_zh: str
@@ -46,6 +63,7 @@ class PrePassResult(BaseModel):
 
 def _build_user_message(
     video_description: str | None,
+    source_metadata_context: str | None,
     srt_text: str,
     chunks: list[list[SrtBlock]],
     frame_timestamps: list[float],
@@ -57,6 +75,8 @@ def _build_user_message(
     parts = ["請分析以下日本綜藝節目字幕，輸出符合 schema 的 JSON 簡報。"]
     if video_description:
         parts.append(f"\n【節目標題/資訊】\n{video_description}")
+    if source_metadata_context:
+        parts.append(f"\n【官方來源 Metadata】\n{source_metadata_context}")
     parts.append(
         "\n【Chunk 邊界】下游會將字幕切成以下 index 區間平行翻譯，請為每段輸出一個 segment_summary："
         f"\n{json.dumps(boundaries, ensure_ascii=False)}"
@@ -79,6 +99,7 @@ async def run_pre_pass(
     chunks: list[list[SrtBlock]],
     pre_pass_path: Path,
     pre_pass_cache_dir: Path,
+    source_metadata_context: str | None = None,
 ) -> tuple[PrePassResult, float]:
     """Run the single pre-pass call. Returns (parsed result, cost in USD).
 
@@ -96,12 +117,19 @@ async def run_pre_pass(
         frame.timestamp_seconds for frame in pre_pass_assets.frames
     ]
     user_message = _build_user_message(
-        video_description, srt_text, chunks, frame_timestamps
+        video_description,
+        source_metadata_context,
+        srt_text,
+        chunks,
+        frame_timestamps,
     )
+    system_instruction = pre_pass_instruction
+    if source_metadata_context:
+        system_instruction += f"\n\n{OFFICIAL_SOURCE_METADATA_INSTRUCTION}"
     thinking_level = genai.types.ThinkingLevel[settings.gemini_thinking_level]
     prompt_digest = hashlib.sha256(
         (
-            pre_pass_instruction
+            system_instruction
             + user_message
             + str(settings.gemini_pre_pass_max_frames)
             + str(settings.gemini_pre_pass_frame_max_side)
@@ -126,7 +154,7 @@ async def run_pre_pass(
             logger.warning(f"[pre-pass] Manifest read failed: {e}")
 
     config = genai.types.GenerateContentConfig(
-        system_instruction=pre_pass_instruction,
+        system_instruction=system_instruction,
         response_mime_type="application/json",
         response_json_schema=PrePassResult.model_json_schema(),
         safety_settings=[
@@ -185,7 +213,7 @@ async def run_pre_pass(
                     {
                         "prompt_digest": prompt_digest,
                         "instruction_sha256": hashlib.sha256(
-                            pre_pass_instruction.encode("utf-8")
+                            system_instruction.encode("utf-8")
                         ).hexdigest(),
                         "user_message_sha256": hashlib.sha256(
                             user_message.encode("utf-8")

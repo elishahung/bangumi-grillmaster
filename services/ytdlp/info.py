@@ -6,9 +6,12 @@ downloading the actual video content.
 
 from .client import get_ytdlp_client
 from typing import cast
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from loguru import logger
 import re
+import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 
 class YtDlpVideoInfo(BaseModel):
@@ -34,6 +37,88 @@ class YtDlpVideoInfo(BaseModel):
         safe_name = re.sub(r"[^\w\s-]", "", text).strip()
         safe_name = re.sub(r"[-\s]+", "_", safe_name)
         return safe_name
+
+
+class TVerTalent(BaseModel):
+    """Talent metadata returned by TVer's contents API."""
+
+    id: str
+    name: str
+    name_kana: str | None = None
+    roles: list[str] = Field(default_factory=list)
+    thumbnail_path: str | None = None
+
+
+def _parse_tver_talents_response(data: dict) -> list[TVerTalent]:
+    """Parse TVer contents API talent JSON into normalized talent records."""
+    raw_talents = data.get("talents")
+    if not isinstance(raw_talents, list):
+        return []
+
+    talents: list[TVerTalent] = []
+    for raw_talent in raw_talents:
+        if not isinstance(raw_talent, dict):
+            continue
+        roles = [
+            role
+            for role in (
+                raw_talent.get("genre1"),
+                raw_talent.get("genre2"),
+                raw_talent.get("genre3"),
+            )
+            if isinstance(role, str) and role
+        ]
+        try:
+            talents.append(
+                TVerTalent(
+                    id=raw_talent["id"],
+                    name=raw_talent["name"],
+                    name_kana=raw_talent.get("name_kana"),
+                    roles=roles,
+                    thumbnail_path=raw_talent.get("thumbnail_path"),
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Skipping invalid TVer talent payload: {e}")
+    return talents
+
+
+def get_tver_episode_talents(episode_id: str) -> list[TVerTalent]:
+    """Fetch episode talent metadata from TVer's contents API.
+
+    This uses the same public contents endpoint consumed by TVer's web UI.
+    It is treated as best-effort metadata: failures are logged and return an
+    empty list so metadata fetching does not block the main workflow.
+    """
+    url = (
+        "https://contents-api.tver.jp/contents/api/v1/episodes/"
+        f"{episode_id}/talents"
+    )
+    request = Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "Origin": "https://tver.jp",
+            "Referer": "https://tver.jp/",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/135.0.0.0 Safari/537.36"
+            ),
+            "x-tver-platform-type": "web",
+        },
+        method="GET",
+    )
+    try:
+        logger.info(f"Fetching TVer talents for episode: {episode_id}")
+        with urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        talents = _parse_tver_talents_response(payload)
+        logger.success(f"Fetched {len(talents)} TVer talents")
+        return talents
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as e:
+        logger.warning(f"Failed to fetch TVer talents for {episode_id}: {e}")
+        return []
 
 
 def get_video_info(input_str: str) -> YtDlpVideoInfo:

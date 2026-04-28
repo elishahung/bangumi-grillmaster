@@ -4,13 +4,13 @@ This module provides the main processing function that coordinates all stages
 of the video captioning workflow, from fetching metadata to translation.
 """
 
-from project import Project, ProgressStage
+from project import Project, ProgressStage, VideoSource
 from loguru import logger
 from settings import settings
 from services.elevenlabs import ElevenLabsASR, SrtFormatOptions, convert_file
-from services.gemini import Gemini, GeminiTranslationError
+from services.gemini import Gemini, GeminiTranslationError, TranslationRequest
 from services.media import MediaProcessor
-from services.ytdlp import download_video, get_video_info
+from services.ytdlp import download_video, get_tver_episode_talents, get_video_info
 
 
 def submit_project(
@@ -95,6 +95,10 @@ def process_project(
             logger.info(f"Stage: Fetching metadata for {project_id}")
             video_data = get_video_info(project.source_url)
             project.update_from_video_info(video_data)
+            if project.source == VideoSource.TVER:
+                talents = get_tver_episode_talents(project.id)
+                if talents:
+                    project.update_from_tver_talents(talents)
             project.mark_progress(ProgressStage.METADATA_FETCHED)
             logger.success("Stage complete: Metadata fetched")
         else:
@@ -198,15 +202,18 @@ def process_project(
             gemini = Gemini()
             try:
                 translation_result = gemini.translate(
-                    project.translation_hint,
-                    project.srt_path,
-                    project_id,
-                    project.video_path,
-                    project.audio_path,
-                    project.translated_path,
-                    project.pre_pass_path,
-                    project.pre_pass_cache_dir,
-                    project.chunks_cache_dir,
+                    TranslationRequest(
+                        video_description=project.translation_hint,
+                        srt_path=project.srt_path,
+                        audio_key=project_id,
+                        video_path=project.video_path,
+                        audio_path=project.audio_path,
+                        output_path=project.translated_path,
+                        pre_pass_path=project.pre_pass_path,
+                        pre_pass_cache_dir=project.pre_pass_cache_dir,
+                        chunks_cache_dir=project.chunks_cache_dir,
+                        source_metadata_context=project.source_metadata_context(),
+                    )
                 )
             except GeminiTranslationError as e:
                 if e.summary.total_cost > 0:

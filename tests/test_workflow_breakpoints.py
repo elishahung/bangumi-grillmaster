@@ -3,10 +3,24 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import workflow as workflow_module
+import project as project_module
+from project import Project
 from services.elevenlabs.asr import ElevenLabsTranscriptionResult
+from services.ytdlp.info import TVerTalent, YtDlpVideoInfo
 
 
 class WorkflowBreakpointTests(unittest.TestCase):
+    def _make_temp_dir(self) -> Path:
+        base = Path(__file__).resolve().parents[1] / "tmp_test_artifacts"
+        base.mkdir(parents=True, exist_ok=True)
+        path = base / "tmp_workflow_breakpoints"
+        import shutil
+
+        shutil.rmtree(path, ignore_errors=True)
+        path.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(path, ignore_errors=True))
+        return path
+
     def _build_project_mock(self):
         project = MagicMock()
         project.id = "demo"
@@ -75,6 +89,50 @@ class WorkflowBreakpointTests(unittest.TestCase):
         convert_file.assert_not_called()
         project.mark_progress.assert_not_called()
         gemini_cls.assert_not_called()
+
+    def test_metadata_stage_fetches_tver_talents(self):
+        root = self._make_temp_dir()
+        project_id = "epmetadata1"
+
+        with (
+            patch.object(project_module, "PROJECT_ROOT_NAME", str(root)),
+            patch.object(
+                workflow_module,
+                "get_video_info",
+                return_value=YtDlpVideoInfo(
+                    id=project_id,
+                    title="かまいガチ",
+                    description="episode description",
+                ),
+            ) as get_video_info,
+            patch.object(
+                workflow_module,
+                "get_tver_episode_talents",
+                return_value=[
+                    TVerTalent(
+                        id="t001",
+                        name="山内　健司",
+                        name_kana="ヤマウチ　ケンジ",
+                        roles=["お笑い芸人"],
+                    )
+                ],
+            ) as get_tver_episode_talents,
+        ):
+            workflow_module.process_project(
+                project_id,
+                break_after=workflow_module.ProgressStage.METADATA_FETCHED,
+            )
+            loaded = Project.from_source_str(project_id)
+
+        get_video_info.assert_called_once_with(
+            f"https://tver.jp/episodes/{project_id}"
+        )
+        get_tver_episode_talents.assert_called_once_with(project_id)
+        self.assertTrue(loaded.is_metadata_fetched)
+        self.assertEqual(
+            loaded.source_metadata.talents[0].name,
+            "山内　健司",
+        )
 
 
 if __name__ == "__main__":

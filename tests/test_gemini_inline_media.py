@@ -121,9 +121,11 @@ class GeminiInlineMediaTests(unittest.IsolatedAsyncioTestCase):
                 chunks,
                 root / "pre_pass.json",
                 root,
+                "Official source cast/talent metadata:\n- 山内　健司",
             )
 
         contents = client.models.calls[0]["contents"]
+        config = client.models.calls[0]["config"]
         self.assertEqual(cost, 0.0)
         self.assertEqual(parsed.summary, "summary")
         self.assertEqual(contents[0].inline_data.data, b"audio-bytes")
@@ -131,6 +133,11 @@ class GeminiInlineMediaTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(contents[1].inline_data.data, b"frame-bytes")
         self.assertEqual(contents[1].inline_data.mime_type, "image/jpeg")
         self.assertIsInstance(contents[-1], str)
+        self.assertIn("【官方來源 Metadata】", contents[-1])
+        self.assertIn("山内　健司", contents[-1])
+        self.assertIn("OFFICIAL SOURCE METADATA", config.system_instruction)
+        self.assertIn("characters` MUST include", config.system_instruction)
+        self.assertIn("exactly as written", config.system_instruction)
 
     async def test_chunk_worker_sends_inline_media_parts(self):
         root = self._make_temp_dir()

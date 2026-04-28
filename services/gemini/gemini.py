@@ -25,6 +25,21 @@ class TranslationResult(TranslationCostSummary):
     pass
 
 
+class TranslationRequest(BaseModel):
+    """Inputs required to run the Gemini translation pipeline."""
+
+    video_description: str | None
+    srt_path: Path
+    audio_key: str
+    video_path: Path
+    audio_path: Path
+    output_path: Path
+    pre_pass_path: Path
+    pre_pass_cache_dir: Path
+    chunks_cache_dir: Path
+    source_metadata_context: str | None = None
+
+
 class Gemini:
     """Google Gemini client for SRT subtitle translation.
 
@@ -44,46 +59,18 @@ class Gemini:
 
     def translate(
         self,
-        video_description: str | None,
-        srt_path: Path,
-        audio_key: str,
-        video_path: Path,
-        audio_path: Path,
-        output_path: Path,
-        pre_pass_path: Path,
-        pre_pass_cache_dir: Path,
-        chunks_cache_dir: Path,
+        request: TranslationRequest,
     ) -> TranslationResult:
         """Translate an SRT file to Traditional Chinese. Blocks until complete.
 
         Pre-pass and per-chunk multimodal assets are cached on disk so a later
         retry can resume without rebuilding media slices.
         """
-        return asyncio.run(
-            self._translate_async(
-                video_description,
-                srt_path,
-                audio_key,
-                video_path,
-                audio_path,
-                output_path,
-                pre_pass_path,
-                pre_pass_cache_dir,
-                chunks_cache_dir,
-            )
-        )
+        return asyncio.run(self._translate_async(request))
 
     async def _translate_async(
         self,
-        video_description: str | None,
-        srt_path: Path,
-        audio_key: str,
-        video_path: Path,
-        audio_path: Path,
-        output_path: Path,
-        pre_pass_path: Path,
-        pre_pass_cache_dir: Path,
-        chunks_cache_dir: Path,
+        request: TranslationRequest,
     ) -> TranslationResult:
         def build_summary(
             *,
@@ -106,9 +93,9 @@ class Gemini:
             )
 
         start_time = time.time()
-        logger.info(f"Starting translation for SRT file: {srt_path}")
+        logger.info(f"Starting translation for SRT file: {request.srt_path}")
 
-        srt_text = srt_path.read_text(encoding="utf-8")
+        srt_text = request.srt_path.read_text(encoding="utf-8")
         blocks = parse_srt(srt_text)
         logger.info(f"Parsed {len(blocks)} SRT blocks")
 
@@ -127,13 +114,14 @@ class Gemini:
         try:
             pre_pass_result, pre_pass_cost = await run_pre_pass(
                 self.client,
-                video_description,
+                request.video_description,
                 srt_text,
-                video_path,
-                audio_path,
+                request.video_path,
+                request.audio_path,
                 chunks,
-                pre_pass_path,
-                pre_pass_cache_dir,
+                request.pre_pass_path,
+                request.pre_pass_cache_dir,
+                request.source_metadata_context,
             )
         except PrePassError as e:
             summary = build_summary(
@@ -150,16 +138,16 @@ class Gemini:
             )
             raise GeminiTranslationError(str(e), summary) from e
 
-        chunks_cache_dir.mkdir(parents=True, exist_ok=True)
+        request.chunks_cache_dir.mkdir(parents=True, exist_ok=True)
         semaphore = asyncio.Semaphore(settings.gemini_concurrency)
 
         async def bounded(i: int, chunk: list[SrtBlock]):
             async with semaphore:
                 chunk_assets = prepare_chunk_media_assets(
-                    video_path=video_path,
-                    audio_path=audio_path,
-                    cache_root=chunks_cache_dir,
-                    video_key=audio_key,
+                    video_path=request.video_path,
+                    audio_path=request.audio_path,
+                    cache_root=request.chunks_cache_dir,
+                    video_key=request.audio_key,
                     chunk=chunk,
                     chunk_index=i,
                     total_chunks=len(chunks),
@@ -243,9 +231,11 @@ class Gemini:
             for i, block in enumerate(all_blocks, start=1)
         ]
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(serialize_srt(all_blocks), encoding="utf-8")
-        logger.success(f"Translation saved to: {output_path}")
+        request.output_path.parent.mkdir(parents=True, exist_ok=True)
+        request.output_path.write_text(
+            serialize_srt(all_blocks), encoding="utf-8"
+        )
+        logger.success(f"Translation saved to: {request.output_path}")
 
         summary = build_summary(
             pre_pass_cost=pre_pass_cost,
