@@ -6,7 +6,7 @@ import workflow as workflow_module
 import project as project_module
 from project import Project
 from services.elevenlabs.asr import ElevenLabsTranscriptionResult
-from services.ytdlp.info import TVerTalent, YtDlpVideoInfo
+from services.ytdlp.info import AbemaTalent, TVerTalent, YtDlpVideoInfo
 
 
 class WorkflowBreakpointTests(unittest.TestCase):
@@ -132,6 +132,54 @@ class WorkflowBreakpointTests(unittest.TestCase):
         self.assertEqual(
             loaded.source_metadata.talents[0].name,
             "山内　健司",
+        )
+
+    def test_metadata_stage_fetches_abema_talents(self):
+        root = self._make_temp_dir()
+        project_id = "90-979_s1_p359"
+
+        with (
+            patch.object(project_module, "PROJECT_ROOT_NAME", str(root)),
+            patch.object(
+                workflow_module,
+                "get_video_info",
+                return_value=YtDlpVideoInfo(
+                    id=project_id,
+                    title="チャンスの時間",
+                    description="episode description",
+                ),
+            ) as get_video_info,
+            patch.object(
+                workflow_module,
+                "get_abema_episode_talents",
+                return_value=[
+                    AbemaTalent(
+                        id=f"abema:{project_id}:1",
+                        name="渡部健（アンジャッシュ）",
+                        roles=["ゲスト"],
+                    )
+                ],
+            ) as get_abema_episode_talents,
+            patch.object(
+                workflow_module,
+                "get_tver_episode_talents",
+            ) as get_tver_episode_talents,
+        ):
+            workflow_module.process_project(
+                project_id,
+                break_after=workflow_module.ProgressStage.METADATA_FETCHED,
+            )
+            loaded = Project.from_source_str(project_id)
+
+        get_video_info.assert_called_once_with(
+            f"https://abema.tv/video/episode/{project_id}"
+        )
+        get_abema_episode_talents.assert_called_once_with(project_id)
+        get_tver_episode_talents.assert_not_called()
+        self.assertTrue(loaded.is_metadata_fetched)
+        self.assertEqual(
+            loaded.source_metadata.talents[0].name,
+            "渡部健（アンジャッシュ）",
         )
 
 

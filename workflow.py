@@ -10,7 +10,12 @@ from settings import settings
 from services.elevenlabs import ElevenLabsASR, SrtFormatOptions, convert_file
 from services.gemini import Gemini, GeminiTranslationError, TranslationRequest
 from services.media import MediaProcessor
-from services.ytdlp import download_video, get_tver_episode_talents, get_video_info
+from services.ytdlp import (
+    download_video,
+    get_abema_episode_talents,
+    get_tver_episode_talents,
+    get_video_info,
+)
 
 
 def submit_project(
@@ -98,7 +103,11 @@ def process_project(
             if project.source == VideoSource.TVER:
                 talents = get_tver_episode_talents(project.id)
                 if talents:
-                    project.update_from_tver_talents(talents)
+                    project.update_from_source_talents(talents)
+            if project.source == VideoSource.ABEMA:
+                talents = get_abema_episode_talents(project.id)
+                if talents:
+                    project.update_from_source_talents(talents)
             project.mark_progress(ProgressStage.METADATA_FETCHED)
             logger.success("Stage complete: Metadata fetched")
         else:

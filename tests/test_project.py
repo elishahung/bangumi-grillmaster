@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import project as project_module
 from project import Project
-from services.ytdlp.info import TVerTalent
+from services.ytdlp.info import SourceTalentInfo
 
 
 class ProjectTests(unittest.TestCase):
@@ -78,9 +78,9 @@ class ProjectTests(unittest.TestCase):
         root = self._make_temp_dir()
         with patch.object(project_module, "PROJECT_ROOT_NAME", str(root)):
             project = Project(id="epmetadata1", name="demo")
-            project.update_from_tver_talents(
+            project.update_from_source_talents(
                 [
-                    TVerTalent(
+                    SourceTalentInfo(
                         id="t001",
                         name="濱家　隆一",
                         name_kana="ハマイエ　リュウイチ",

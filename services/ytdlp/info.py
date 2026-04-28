@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 import re
 import json
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -39,14 +40,22 @@ class YtDlpVideoInfo(BaseModel):
         return safe_name
 
 
-class TVerTalent(BaseModel):
-    """Talent metadata returned by TVer's contents API."""
+class SourceTalentInfo(BaseModel):
+    """Normalized source talent metadata."""
 
     id: str
     name: str
     name_kana: str | None = None
     roles: list[str] = Field(default_factory=list)
     thumbnail_path: str | None = None
+
+
+class TVerTalent(SourceTalentInfo):
+    """Talent metadata returned by TVer's contents API."""
+
+
+class AbemaTalent(SourceTalentInfo):
+    """Talent metadata returned by ABEMA's program API."""
 
 
 def _parse_tver_talents_response(data: dict) -> list[TVerTalent]:
@@ -80,6 +89,38 @@ def _parse_tver_talents_response(data: dict) -> list[TVerTalent]:
             )
         except Exception as e:
             logger.warning(f"Skipping invalid TVer talent payload: {e}")
+    return talents
+
+
+def _parse_abema_casts_response(
+    data: dict, episode_id: str
+) -> list[AbemaTalent]:
+    """Parse ABEMA program API credit casts into normalized talent records."""
+    raw_casts = data.get("credit", {}).get("casts")
+    if not isinstance(raw_casts, list):
+        return []
+
+    talents: list[AbemaTalent] = []
+    current_role: str | None = None
+    for raw_cast in raw_casts:
+        if not isinstance(raw_cast, str):
+            continue
+
+        cast = raw_cast.strip()
+        if not cast:
+            continue
+
+        if cast.startswith("■"):
+            current_role = cast.lstrip("■").strip() or None
+            continue
+
+        talents.append(
+            AbemaTalent(
+                id=f"abema:{episode_id}:{len(talents) + 1}",
+                name=cast,
+                roles=[current_role] if current_role else [],
+            )
+        )
     return talents
 
 
@@ -118,6 +159,82 @@ def get_tver_episode_talents(episode_id: str) -> list[TVerTalent]:
         return talents
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as e:
         logger.warning(f"Failed to fetch TVer talents for {episode_id}: {e}")
+        return []
+
+
+def _get_abema_device_token() -> str:
+    """Create an anonymous ABEMA device token using yt-dlp's auth routine."""
+    from yt_dlp.extractor.abematv import AbemaTVBaseIE
+
+    device_id = str(uuid.uuid4())
+    application_key_secret = AbemaTVBaseIE._generate_aks(device_id)
+    request = Request(
+        "https://api.abema.io/v1/users",
+        data=json.dumps(
+            {
+                "deviceId": device_id,
+                "applicationKeySecret": application_key_secret,
+            }
+        ).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Origin": "https://abema.tv",
+            "Referer": "https://abema.tv/",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/135.0.0.0 Safari/537.36"
+            ),
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=20) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    token = payload.get("token")
+    if not isinstance(token, str) or not token:
+        raise ValueError("ABEMA token response did not contain a token")
+    return token
+
+
+def get_abema_episode_talents(episode_id: str) -> list[AbemaTalent]:
+    """Fetch episode cast metadata from ABEMA's program API.
+
+    ABEMA exposes the page cast list under `credit.casts` in the same program
+    API used by yt-dlp for episode metadata. The API requires an anonymous
+    device token, so this reuses yt-dlp's current application-key routine.
+    """
+    url = f"https://api.abema.io/v1/video/programs/{episode_id}"
+    try:
+        logger.info(f"Fetching ABEMA talents for episode: {episode_id}")
+        token = _get_abema_device_token()
+        request = Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"bearer {token}",
+                "Origin": "https://abema.tv",
+                "Referer": "https://abema.tv/",
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/135.0.0.0 Safari/537.36"
+                ),
+            },
+            method="GET",
+        )
+        with urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        talents = _parse_abema_casts_response(payload, episode_id)
+        logger.success(f"Fetched {len(talents)} ABEMA talents")
+        return talents
+    except (
+        HTTPError,
+        URLError,
+        TimeoutError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as e:
+        logger.warning(f"Failed to fetch ABEMA talents for {episode_id}: {e}")
         return []
 
 

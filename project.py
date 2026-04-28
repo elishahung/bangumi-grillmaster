@@ -15,7 +15,7 @@ from loguru import logger
 from settings import settings
 import re
 from urllib.parse import urlparse
-from services.ytdlp.info import TVerTalent, YtDlpVideoInfo
+from services.ytdlp.info import SourceTalentInfo, YtDlpVideoInfo
 
 PROJECT_ROOT_NAME = "projects"
 PROJECT_FILE_NAME = "project.json"
@@ -217,8 +217,10 @@ class Project(BaseModel):
                 )
         self.save()
 
-    def update_from_tver_talents(self, talents: list[TVerTalent]) -> None:
-        """Persist TVer talent metadata on the project."""
+    def update_from_source_talents(
+        self, talents: list[SourceTalentInfo]
+    ) -> None:
+        """Persist source-provided talent metadata on the project."""
         self.source_metadata.talents = [
             SourceTalent(
                 id=talent.id,
