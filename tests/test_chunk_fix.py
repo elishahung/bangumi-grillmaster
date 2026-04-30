@@ -7,6 +7,8 @@ from unittest.mock import patch
 os.environ.setdefault("DEEPSEEK_API_KEY", "test-key")
 
 from services.gemini.errors import ChunkFixError
+from services.gemini.chunk_worker import _validate_output
+from services.gemini.chunker import SrtBlock
 from services.llm import chunk_fix
 
 
@@ -87,12 +89,16 @@ class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_fix_chunk_structure_uses_deepseek_with_high_effort_and_cost(self):
         FakeAsyncOpenAI.response = make_response(
-            content="fixed",
+            content='{"assignments":[{"output_index":1,"source_index":1}]}',
             cache_hit_tokens=1000,
             cache_miss_tokens=2000,
             completion_tokens=3000,
             reasoning_tokens=400,
         )
+        validate_calls = []
+
+        def validate(text: str) -> None:
+            validate_calls.append(text)
 
         with (
             patch.object(chunk_fix, "AsyncOpenAI", FakeAsyncOpenAI),
@@ -101,13 +107,17 @@ class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
         ):
             text, cost = await chunk_fix.fix_chunk_structure(
                 "1\n00:00:00,000 --> 00:00:01,000\nsource",
-                "broken",
+                "7\n00:00:09,000 --> 00:00:10,000\ntranslated",
                 "invalid structure",
-                lambda _text: None,
+                validate,
                 "[test]",
             )
 
-        self.assertEqual(text, "fixed")
+        self.assertEqual(
+            text,
+            "1\n00:00:00,000 --> 00:00:01,000\ntranslated\n",
+        )
+        self.assertEqual(validate_calls, [text])
         self.assertEqual(
             FakeAsyncOpenAI.init_calls[0],
             {
@@ -121,6 +131,13 @@ class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             create_call["extra_body"], {"thinking": {"type": "enabled"}}
         )
+        self.assertEqual(create_call["response_format"], {"type": "json_object"})
+        first_user_message = create_call["messages"][1]["content"]
+        self.assertIn(
+            "1\n00:00:09,000 --> 00:00:10,000\ntranslated",
+            first_user_message,
+        )
+        self.assertNotIn("7\n00:00:09,000 --> 00:00:10,000", first_user_message)
         expected_cost = (
             (1000 / 1_000_000) * 0.0028
             + (2000 / 1_000_000) * 0.14
@@ -128,15 +145,15 @@ class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertAlmostEqual(cost, expected_cost)
 
-    async def test_validation_failure_escalates_retry_to_max_effort(self):
+    async def test_validation_failure_retries_with_high_effort(self):
         responses = [
             make_response(
-                content="still broken",
+                content='{"assignments":[{"output_index":1,"source_index":2}]}',
                 cache_miss_tokens=1000,
                 completion_tokens=1000,
             ),
             make_response(
-                content="fixed",
+                content='{"assignments":[{"output_index":2,"source_index":1}]}',
                 cache_miss_tokens=2000,
                 completion_tokens=2000,
             ),
@@ -150,7 +167,9 @@ class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
 
         def validate(text: str) -> None:
             validate_calls.append(text)
-            if text == "still broken":
+            if not text.startswith(
+                "1\n00:00:00,000 --> 00:00:01,000\ntranslated"
+            ):
                 raise ValueError("still invalid")
 
         with (
@@ -161,19 +180,49 @@ class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
             patch("services.llm.chunk_fix.asyncio.sleep", return_value=None),
         ):
             text, cost = await chunk_fix.fix_chunk_structure(
-                "1\n00:00:00,000 --> 00:00:01,000\nsource",
-                "broken",
+                (
+                    "1\n00:00:00,000 --> 00:00:01,000\nsource 1\n\n"
+                    "2\n00:00:02,000 --> 00:00:03,000\nsource 2"
+                ),
+                "1\n00:00:09,000 --> 00:00:10,000\ntranslated",
                 "invalid structure",
                 validate,
                 "[test]",
             )
 
-        self.assertEqual(text, "fixed")
-        self.assertEqual(validate_calls, ["still broken", "fixed"])
+        self.assertEqual(
+            text,
+            (
+                "1\n00:00:00,000 --> 00:00:01,000\ntranslated\n\n"
+                "2\n00:00:02,000 --> 00:00:03,000\n\n"
+            ),
+        )
+        self.assertEqual(
+            validate_calls,
+            [
+                (
+                    "1\n00:00:00,000 --> 00:00:01,000\n\n\n"
+                    "2\n00:00:02,000 --> 00:00:03,000\ntranslated\n"
+                ),
+                (
+                    "1\n00:00:00,000 --> 00:00:01,000\ntranslated\n\n"
+                    "2\n00:00:02,000 --> 00:00:03,000\n\n"
+                ),
+            ],
+        )
         self.assertEqual(
             [call["reasoning_effort"] for call in FakeAsyncOpenAI.create_calls],
-            ["high", "max"],
+            ["high", "high"],
         )
+        second_user_message = FakeAsyncOpenAI.create_calls[1]["messages"][1][
+            "content"
+        ]
+        self.assertIn("still invalid", second_user_message)
+        self.assertIn(
+            "2\n00:00:02,000 --> 00:00:03,000\ntranslated",
+            second_user_message,
+        )
+        self.assertNotIn("00:00:09,000 --> 00:00:10,000", second_user_message)
         expected_cost = (
             (1000 / 1_000_000) * 0.14
             + (1000 / 1_000_000) * 0.28
@@ -211,6 +260,153 @@ class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertAlmostEqual(raised.exception.accumulated_cost, expected_cost)
         self.assertIn("non-stop finish reason: length", str(raised.exception))
+
+    async def test_canonicalize_by_position_preserves_text_and_source_metadata(self):
+        fixed = chunk_fix.canonicalize_by_position(
+            (
+                "10\n00:00:01,000 --> 00:00:02,000\nsource a\n\n"
+                "11\n00:00:03,000 --> 00:00:04,000\nsource b\n"
+            ),
+            (
+                "99\n00:09:01,000 --> 00:09:02,000\ntranslated a\n\n"
+                "wrong-index\n00:09:03,000 --> 00:09:04,000\ntranslated b\n"
+            ),
+        )
+
+        self.assertEqual(
+            fixed,
+            (
+                "10\n00:00:01,000 --> 00:00:02,000\ntranslated a\n\n"
+                "11\n00:00:03,000 --> 00:00:04,000\ntranslated b\n"
+            ),
+        )
+
+    async def test_canonicalize_by_position_returns_none_on_count_mismatch(self):
+        fixed = chunk_fix.canonicalize_by_position(
+            "1\n00:00:01,000 --> 00:00:02,000\nsource\n",
+            (
+                "1\n00:00:01,000 --> 00:00:02,000\ntranslated\n\n"
+                "2\n00:00:03,000 --> 00:00:04,000\nextra\n"
+            ),
+        )
+
+        self.assertIsNone(fixed)
+
+    async def test_canonicalize_by_timecode_subset_fills_missing_source_blocks(self):
+        fixed = chunk_fix.canonicalize_by_timecode_subset(
+            (
+                "10\n00:00:01,000 --> 00:00:02,000\nsource a\n\n"
+                "11\n00:00:03,000 --> 00:00:04,000\nsource b\n\n"
+                "12\n00:00:05,000 --> 00:00:06,000\nsource c\n"
+            ),
+            (
+                "99\n00:00:01,000 --> 00:00:02,000\ntranslated a\n\n"
+                "101\n00:00:05,000 --> 00:00:06,000\ntranslated c\n"
+            ),
+        )
+
+        self.assertEqual(
+            fixed,
+            (
+                "10\n00:00:01,000 --> 00:00:02,000\ntranslated a\n\n"
+                "11\n00:00:03,000 --> 00:00:04,000\n\n\n"
+                "12\n00:00:05,000 --> 00:00:06,000\ntranslated c\n"
+            ),
+        )
+
+    async def test_canonicalize_by_timecode_subset_rejects_unexpected_timecode(self):
+        fixed = chunk_fix.canonicalize_by_timecode_subset(
+            "1\n00:00:01,000 --> 00:00:02,000\nsource\n",
+            "1\n00:00:09,000 --> 00:00:10,000\ntranslated\n",
+        )
+
+        self.assertIsNone(fixed)
+
+    async def test_canonicalize_by_aligned_sequence_fills_gap_between_anchors(self):
+        with patch.object(
+            chunk_fix.settings, "gemini_chunk_missing_block_tolerance", 2
+        ):
+            fixed = chunk_fix.canonicalize_by_aligned_sequence(
+                (
+                    "119\n00:00:01,000 --> 00:00:02,000\nsource 119\n\n"
+                    "120\n00:00:03,000 --> 00:00:04,000\nsource 120\n\n"
+                    "121\n00:00:05,000 --> 00:00:06,000\nsource 121\n\n"
+                    "122\n00:00:07,000 --> 00:00:08,000\nsource 122\n"
+                ),
+                (
+                    "1\n00:00:01,000 --> 00:00:02,000\ntranslated 119\n\n"
+                    "2\n00:09:09,448 --> 00:11:56,310\ntranslated 120\n\n"
+                    "3\n00:00:07,000 --> 00:00:08,000\ntranslated 122\n"
+                ),
+            )
+
+        self.assertEqual(
+            fixed,
+            (
+                "119\n00:00:01,000 --> 00:00:02,000\ntranslated 119\n\n"
+                "120\n00:00:03,000 --> 00:00:04,000\ntranslated 120\n\n"
+                "121\n00:00:05,000 --> 00:00:06,000\n\n\n"
+                "122\n00:00:07,000 --> 00:00:08,000\ntranslated 122\n"
+            ),
+        )
+
+    async def test_canonicalize_by_aligned_sequence_rejects_large_gap(self):
+        with patch.object(
+            chunk_fix.settings, "gemini_chunk_missing_block_tolerance", 2
+        ):
+            fixed = chunk_fix.canonicalize_by_aligned_sequence(
+                (
+                    "119\n00:00:01,000 --> 00:00:02,000\nsource 119\n\n"
+                    "120\n00:00:03,000 --> 00:00:04,000\nsource 120\n\n"
+                    "121\n00:00:05,000 --> 00:00:06,000\nsource 121\n\n"
+                    "122\n00:00:07,000 --> 00:00:08,000\nsource 122\n\n"
+                    "123\n00:00:09,000 --> 00:00:10,000\nsource 123\n\n"
+                    "124\n00:00:11,000 --> 00:00:12,000\nsource 124\n"
+                ),
+                (
+                    "1\n00:00:01,000 --> 00:00:02,000\ntranslated 119\n\n"
+                    "2\n00:09:09,448 --> 00:11:56,310\ntranslated unknown\n\n"
+                    "3\n00:00:11,000 --> 00:00:12,000\ntranslated 124\n"
+                ),
+            )
+
+        self.assertIsNone(fixed)
+
+    async def test_validate_output_fills_missing_blocks_with_empty_text(self):
+        expected = [
+            SrtBlock(
+                index=10,
+                timecode="00:00:01,000 --> 00:00:02,000",
+                text="source a",
+            ),
+            SrtBlock(
+                index=11,
+                timecode="00:00:03,000 --> 00:00:04,000",
+                text="source b",
+            ),
+        ]
+        output = "99\n00:00:01,000 --> 00:00:02,000\ntranslated a\n"
+
+        with patch.object(
+            chunk_fix.settings, "gemini_chunk_missing_block_tolerance", 1
+        ):
+            blocks = _validate_output(expected, output)
+
+        self.assertEqual(
+            blocks,
+            [
+                SrtBlock(
+                    index=10,
+                    timecode="00:00:01,000 --> 00:00:02,000",
+                    text="translated a",
+                ),
+                SrtBlock(
+                    index=11,
+                    timecode="00:00:03,000 --> 00:00:04,000",
+                    text="",
+                ),
+            ],
+        )
 
 
 if __name__ == "__main__":

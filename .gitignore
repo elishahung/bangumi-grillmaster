@@ -224,3 +224,5 @@ _test*
 .next/
 data
 node_modules
+
+.claude/

@@ -9,7 +9,12 @@ from loguru import logger
 from pydantic import BaseModel
 
 from settings import settings
-from services.llm.chunk_fix import fix_chunk_structure
+from services.llm.chunk_fix import (
+    canonicalize_by_aligned_sequence,
+    canonicalize_by_position,
+    canonicalize_by_timecode_subset,
+    fix_chunk_structure,
+)
 from .assets import ChunkMediaAssets, media_refs_to_parts
 from .chunker import SrtBlock, parse_srt
 from .cost import calculate_cost
@@ -163,6 +168,9 @@ def _validate_output(
     for src in expected:
         out = output_by_timecode.get(src.timecode)
         if out is None:
+            normalized.append(
+                SrtBlock(index=src.index, timecode=src.timecode, text="")
+            )
             continue
         normalized.append(
             SrtBlock(index=src.index, timecode=src.timecode, text=out.text)
@@ -353,6 +361,47 @@ async def translate_chunk(
         blocks = _validate_output(chunk, raw_text)
     except ValueError as validation_error:
         error_str = str(validation_error)
+        canonical_text = canonicalize_by_timecode_subset(source_srt, raw_text)
+        canonical_method = "Timecode subset"
+        if canonical_text is None:
+            canonical_text = canonicalize_by_position(source_srt, raw_text)
+            canonical_method = "Positional"
+        if canonical_text is None:
+            canonical_text = canonicalize_by_aligned_sequence(source_srt, raw_text)
+            canonical_method = "Aligned sequence"
+        if canonical_text is not None:
+            try:
+                blocks = _validate_output(chunk, canonical_text)
+            except ValueError as canonical_error:
+                logger.warning(
+                    f"{prefix} {canonical_method} canonicalization failed: "
+                    f"{canonical_error}"
+                )
+            else:
+                try:
+                    fixed_path.write_text(canonical_text, encoding="utf-8")
+                    _write_chunk_manifest(
+                        media_assets,
+                        user_message,
+                        raw_path,
+                        fixed_path=fixed_path,
+                    )
+                except OSError as e:
+                    logger.warning(
+                        f"{prefix} Failed to write fixed cache "
+                        f"{fixed_path.name}: {e}"
+                    )
+                logger.success(
+                    f"{prefix} {canonical_method} canonicalization succeeded; "
+                    f"{len(blocks)} blocks (${api_cost:.4f}, retries={retries})"
+                )
+                return ChunkTranslationResult(
+                    blocks=blocks,
+                    cost=api_cost,
+                    retries=retries,
+                    from_index=from_index,
+                    to_index=to_index,
+                )
         logger.warning(
             f"{prefix} Raw output failed validation: {error_str}. "
             f"Running fix layer."
