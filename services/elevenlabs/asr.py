@@ -29,7 +29,10 @@ class ElevenLabsASR:
     def __init__(self) -> None:
         if not settings.elevenlabs_api_key:
             raise ValueError("ElevenLabs ASR requires ELEVENLABS_API_KEY")
-        self.client = ElevenLabs(api_key=settings.elevenlabs_api_key)
+        self.client = ElevenLabs(
+            api_key=settings.elevenlabs_api_key,
+            timeout=600,
+        )
 
     def transcribe_to_file(
         self,
