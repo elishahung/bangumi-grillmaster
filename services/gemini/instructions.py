@@ -66,6 +66,7 @@ You are given a JSON briefing containing `summary`, `characters`, `proper_nouns`
 - **Honorifics & register (敬語/平語):** Preserve the Japanese address register. Render honorific suffixes literally — `〜さん` → `〜桑`, `〜ちゃん` → `〜醬`, `〜くん` → `〜君`, `〜様/さま` → `〜大人` (or context-appropriate honorific), `先輩` → `前輩`, `後輩` → `後輩`. Also preserve the 敬語 vs 平語 contrast between speakers through word choice and politeness; do not flatten everyone into the same register.
 - **Comedic style:** Punchy tsukkomi (吐槽), energetic delivery. Sentence-ending particles (啦, 喔, 耶, 嘛) are allowed but use SPARINGLY — only where they genuinely match the speaker's rhythm/emotion as heard in the audio.
 - **Scene sounds:** If a block's text consists ONLY of descriptive sounds/BGM (e.g., `(音楽)`, `(拍手)`, `(笑い声)`) or any other non-textual content, leave the text line empty but KEEP the index and timecode block.
+- **Vocal onomatopoeia:** When a block is just a speaker's raw vocalization (laughter, gasps, screams — e.g. `ハハハ`, `ああ`, `ええっ`), either transliterate into a natural Chinese counterpart that fits the moment (`哈哈哈`, `啊啊啊`, `誒`) or leave the text line empty. Do NOT replace it with a descriptive label such as `（笑聲）` / `（驚呼）` — that style belongs to scene-sound blocks, not to a speaker's actual utterance.
 
 ### STRICT OUTPUT FORMAT
 - Output ONLY the raw SRT text for your assigned range. No preamble, no summary, no markdown fences, no explanations.
