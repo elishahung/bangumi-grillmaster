@@ -14,6 +14,10 @@ from loguru import logger
 JAPANESE_HARD_PUNCTUATION = "。！？?!"
 JAPANESE_SOFT_PUNCTUATION = "、，,：:；;"
 JAPANESE_PARTICLE_BREAK_AFTER = set("をにへでとはがのもや")
+# Small kana and the prolonged-sound mark are orthographically bound to
+# the preceding character — they can never start a word, an utterance,
+# or a wrapped line. Both hiragana and katakana variants included.
+JAPANESE_BOUND_KANA = set("ぁぃぅぇぉゃゅょっゎァィゥェォャュョッヮー")
 NO_SPACE_BEFORE = set("。、，,.！？?!：:；;）)]」』】》〉")
 NO_SPACE_AFTER = set("（([「『【《〈")
 JAPANESE_UNSAFE_SEGMENT_STARTS = {
@@ -679,7 +683,7 @@ def _score_wrap_break(text: str, i: int, midpoint: float) -> float:
 def _line_wrap_unsafe_start(line2: str) -> bool:
     if not line2:
         return False
-    if line2[0] in NO_SPACE_BEFORE:
+    if line2[0] in NO_SPACE_BEFORE or line2[0] in JAPANESE_BOUND_KANA:
         return True
     return any(line2.startswith(u) for u in JAPANESE_UNSAFE_SEGMENT_STARTS)
 
@@ -730,6 +734,7 @@ def _is_unsafe_segment_start(text: str) -> bool:
         return True
     return (
         stripped[0] in NO_SPACE_BEFORE
+        or stripped[0] in JAPANESE_BOUND_KANA
         or stripped in JAPANESE_UNSAFE_SEGMENT_STARTS
     )
 

@@ -630,6 +630,34 @@ class ElevenLabsSrtTests(unittest.TestCase):
         self.assertIn("さあ赤ちゃん。", srt)
         self.assertNotIn("\nさ\n", srt.rstrip("\n") + "\n")
 
+    def test_silence_does_not_split_before_bound_small_kana(self):
+        # Speaker said 'ちょっと待ってください' but paused after 'ち'.
+        # The next ASR token starts with 'ょ' — a small kana that's
+        # orthographically locked to the preceding char. It must never
+        # trigger a silence-driven utterance split.
+        payload = {
+            "words": [
+                word("と", 0.0, 0.1, "speaker_0"),
+                word("り", 0.1, 0.2, "speaker_0"),
+                word("あ", 0.2, 0.3, "speaker_0"),
+                word("え", 0.3, 0.4, "speaker_0"),
+                word("ず", 0.4, 0.5, "speaker_0"),
+                word("ち", 0.5, 0.7, "speaker_0"),
+                word("ょ", 1.7, 1.8, "speaker_0"),  # 1s silence — would split
+                word("っ", 1.8, 1.9, "speaker_0"),
+                word("と", 1.9, 2.0, "speaker_0"),
+                word("待って", 2.0, 2.4, "speaker_0"),
+                word("ください。", 2.4, 2.8, "speaker_0"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("とりあえずちょっと待ってください。", srt)
+        # The ASR-induced split between 'ち' and 'ょ' must NOT survive.
+        self.assertNotIn("\nち\n", srt.rstrip("\n") + "\n")
+        self.assertNotIn("ち\nょ", srt)
+
     def test_silence_split_still_fires_when_upcoming_tail_is_long(self):
         # A different-speaker boundary still splits, even if the next
         # speaker's first utterance is short.
