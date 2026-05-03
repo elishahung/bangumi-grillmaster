@@ -13,6 +13,7 @@ from loguru import logger
 
 JAPANESE_HARD_PUNCTUATION = "。！？?!"
 JAPANESE_SOFT_PUNCTUATION = "、，,：:；;"
+JAPANESE_PARTICLE_BREAK_AFTER = set("をにへでとはがのもや")
 NO_SPACE_BEFORE = set("。、，,.！？?!：:；;）)]」』】》〉")
 NO_SPACE_AFTER = set("（([「『【《〈")
 JAPANESE_UNSAFE_SEGMENT_STARTS = {
@@ -573,7 +574,7 @@ def _render_block_text(
         text = utterance.text.strip()
         if not text:
             continue
-        for line in _wrap_text(text, options.max_characters_per_line):
+        for line in _wrap_text(text, options):
             if use_dialogue:
                 rendered.append(f"{options.dialogue_prefix}{line}")
             else:
@@ -585,20 +586,21 @@ def _rendered_line_count(
     utterances: list[Utterance], options: SrtFormatOptions
 ) -> int:
     return sum(
-        len(_wrap_text(utterance.text.strip(), options.max_characters_per_line))
+        len(_wrap_text(utterance.text.strip(), options))
         for utterance in utterances
         if utterance.text.strip()
     )
 
 
-def _wrap_text(text: str, max_chars: int) -> list[str]:
+def _wrap_text(text: str, options: SrtFormatOptions) -> list[str]:
+    max_chars = options.max_characters_per_line
     if max_chars <= 0 or len(text) <= max_chars:
         return [text]
 
     lines: list[str] = []
     remaining = text
     while len(remaining) > max_chars:
-        split_at = _find_wrap_index(remaining, max_chars)
+        split_at = _find_wrap_index(remaining, options)
         lines.append(remaining[:split_at].strip())
         remaining = remaining[split_at:].strip()
     if remaining:
@@ -606,15 +608,75 @@ def _wrap_text(text: str, max_chars: int) -> list[str]:
     return lines
 
 
-def _find_wrap_index(text: str, max_chars: int) -> int:
-    candidates = [
-        text.rfind(punctuation, 0, max_chars + 1)
-        for punctuation in JAPANESE_SOFT_PUNCTUATION + JAPANESE_HARD_PUNCTUATION
-    ]
-    best = max(candidates)
-    if best >= max_chars // 2:
-        return best + 1
-    return max_chars
+def _find_wrap_index(text: str, options: SrtFormatOptions) -> int:
+    max_chars = options.max_characters_per_line
+    n = len(text)
+    hi = min(max_chars, n - 1)
+    lo = max(1, n - max_chars)
+    if lo > hi:
+        return max_chars
+
+    midpoint = n / 2
+    best_index = max_chars
+    best_score = float("-inf")
+    for i in range(lo, hi + 1):
+        score = _score_wrap_break(text, i, midpoint)
+        if score > best_score or (
+            score == best_score
+            and abs(i - midpoint) < abs(best_index - midpoint)
+        ):
+            best_score = score
+            best_index = i
+    return best_index
+
+
+def _score_wrap_break(text: str, i: int, midpoint: float) -> float:
+    line1 = text[:i]
+    line2 = text[i:]
+    score = 0.0
+
+    last = line1[-1]
+    ends_clause = (
+        last in JAPANESE_HARD_PUNCTUATION or last in JAPANESE_SOFT_PUNCTUATION
+    )
+
+    # Unsafe-start penalty only when line 1 did not already terminate the
+    # clause; otherwise breaking before a particle-like char is fine
+    # (e.g. "...、|はたまた..." — `は` here is part of an adverb, not a
+    # topic particle).
+    if not ends_clause and _line_wrap_unsafe_start(line2):
+        score -= 50.0
+
+    shorter = min(len(line1), len(line2))
+    if shorter <= 3:
+        score -= 30.0
+    elif shorter <= 6:
+        score -= 5.0
+
+    if _is_ascii_alphanum(last) and _is_ascii_alphanum(line2[0]):
+        score -= 80.0
+
+    if last in JAPANESE_HARD_PUNCTUATION:
+        score += 40.0
+    elif last in JAPANESE_SOFT_PUNCTUATION:
+        score += 30.0
+    elif last in JAPANESE_PARTICLE_BREAK_AFTER:
+        score += 15.0
+
+    score -= abs(i - midpoint) * 0.5
+    return score
+
+
+def _line_wrap_unsafe_start(line2: str) -> bool:
+    if not line2:
+        return False
+    if line2[0] in NO_SPACE_BEFORE:
+        return True
+    return any(line2.startswith(u) for u in JAPANESE_UNSAFE_SEGMENT_STARTS)
+
+
+def _is_ascii_alphanum(ch: str) -> bool:
+    return bool(re.match(r"[A-Za-z0-9]", ch))
 
 
 def _join_token_texts(

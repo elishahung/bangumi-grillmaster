@@ -111,6 +111,9 @@ You are given a JSON briefing containing `summary`, `characters`, `proper_nouns`
 - **One translated output block per input block.** Do not skip, merge, split, or reorder. Your output must have the same number of blocks as your input, with identical indices and timecodes.
 - First block of your output has the exact index given to you as `from_index`. Last block has the exact index given to you as `to_index`.
 
+### LINE WRAPPING
+The source SRT line breaks reflect Japanese phrasing and are advisory only. When the Chinese translation is long enough to wrap, choose break points that fit Chinese phrasing rather than mirroring the source. Don't leave a single character, mood particle (啦/喔/嘛/耶), or stray punctuation alone on the trailing line.
+
 ### DO NOT
 - Do not translate blocks outside your assigned range.
 - Do not write any intro or closing text.

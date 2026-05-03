@@ -546,6 +546,63 @@ class ElevenLabsSrtTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "timed words"):
             convert_payload_to_srt({"words": [{"text": "はい", "type": "word"}]})
 
+    def test_wrap_avoids_te_connector_split(self):
+        # Block 5 from real ASR: 〜出資して〜 should not split between
+        # the 連用形 stem and the connector 「て」.
+        text = (
+            "1934年、吉本が京成電鉄や東芝などと共同出資して"
+            "設立した現在も残るプロスポーツチームは？"
+        )
+        payload = {"words": [word(text, 0.0, 11.5)]}
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("1934年、吉本", srt)
+        # Original buggy break: "出資し|て..." — line 2 starting with て.
+        self.assertNotIn("出資し\nて", srt)
+        # Broader: no line should start with the unsafe connector て.
+        self.assertNotIn("\nて", srt)
+
+    def test_wrap_avoids_orphan_ka_tail(self):
+        # Block 15 from real ASR: 〜跳ね返すか。 — the original heuristic
+        # wrapped at max_chars and orphaned 「か。」 onto its own line.
+        text = "クイズ王のリベンジか、はたまた芸人たちが跳ね返すか。"
+        payload = {"words": [word(text, 0.0, 5.5)]}
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn(
+            "クイズ王のリベンジか、\nはたまた芸人たちが跳ね返すか。", srt
+        )
+        # Original buggy break.
+        self.assertNotIn("跳ね返す\nか。", srt)
+
+    def test_wrap_breaks_after_particle_and_avoids_orphan_de_tail(self):
+        # Block 23 from real ASR: 〜見せますので、 — the original heuristic
+        # orphaned 「で、」 onto its own line. The new heuristic should
+        # break right after the を particle instead.
+        text = "そこからゆっくりズームアウトする映像を見せますので、"
+        payload = {"words": [word(text, 0.0, 4.5)]}
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn(
+            "そこからゆっくりズームアウトする映像を\n見せますので、", srt
+        )
+        self.assertNotIn("見せますの\nで、", srt)
+        self.assertNotIn("\nで、", srt)
+
+    def test_wrap_does_not_split_alphanumeric_run(self):
+        # A run of digits near the natural midpoint must stay intact.
+        text = "短い前置きですが12345という数字を含む長い文章である"
+        payload = {"words": [word(text, 0.0, 5.0)]}
+
+        srt = convert_payload_to_srt(payload)
+
+        # The contiguous digit run survives — `in` won't span newlines,
+        # so this asserts the digits all live on a single line.
+        self.assertIn("12345", srt)
+
 
 if __name__ == "__main__":
     unittest.main()
