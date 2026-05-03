@@ -29,6 +29,7 @@ class WorkflowGeminiCostTests(unittest.TestCase):
         project.pre_pass_cache_dir = base / ".pre_pass"
         project.chunks_cache_dir = base / ".chunks"
         project.source_metadata_context.return_value = None
+        project.parent_pre_pass_context.return_value = None
         return project
 
     def test_workflow_persists_gemini_cost_on_success(self):
