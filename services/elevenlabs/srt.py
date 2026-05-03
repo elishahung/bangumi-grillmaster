@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +71,7 @@ INLINE_SHORT_SAME_SPEAKER_UTTERANCES = True
 MAX_INLINE_SHORT_UTTERANCE_CHARS = 8
 MAX_ORPHAN_TAIL_CHARS = 8
 MIN_SEGMENT_DURATION_S = 0.35
+DRAG_FILLER_MIN_DURATION_S = 0.6
 DIALOGUE_PREFIX = "-"
 INCLUDE_SPEAKER_PREFIX_FOR_DIALOGUE = True
 TEXT_JOIN_LANGUAGE = "ja"
@@ -101,17 +102,15 @@ class SrtFormatOptions:
     max_inline_short_utterance_chars: int = MAX_INLINE_SHORT_UTTERANCE_CHARS
     max_orphan_tail_chars: int = MAX_ORPHAN_TAIL_CHARS
     min_segment_duration_s: float = MIN_SEGMENT_DURATION_S
+    drag_filler_min_duration_s: float = DRAG_FILLER_MIN_DURATION_S
     split_on_punctuation: str = JAPANESE_HARD_PUNCTUATION
     soft_split_punctuation: str = JAPANESE_SOFT_PUNCTUATION
     dialogue_prefix: str = DIALOGUE_PREFIX
-    line_separator: str = "\n"
     include_speaker_prefix_for_dialogue: bool = (
         INCLUDE_SPEAKER_PREFIX_FOR_DIALOGUE
     )
     text_join_language: str = TEXT_JOIN_LANGUAGE
-    ignored_word_types: set[str] = field(
-        default_factory=lambda: set(IGNORED_WORD_TYPES)
-    )
+    ignored_word_types: frozenset[str] = IGNORED_WORD_TYPES
 
 
 @dataclass(frozen=True)
@@ -171,7 +170,11 @@ def _convert_payload_with_options(
     if options.merge_overlapping_blocks:
         blocks = _merge_overlapping_blocks(blocks, options)
     if options.inline_short_same_speaker_utterances:
-        _inline_short_same_speaker_utterances(blocks, options)
+        for block in blocks:
+            if len(block.utterances) >= 2:
+                block.utterances = _inline_same_speaker_utterances(
+                    block.utterances, options
+                )
     _resolve_block_overlaps(blocks, options)
     return _render_srt(blocks, options)
 
@@ -213,6 +216,11 @@ def _extract_tokens(
 
 
 def _split_token_if_needed(token: WordToken) -> list[WordToken]:
+    # Only split a leading hard-punct prefix off the token (e.g.
+    # `。1934` → `。` + `1934`). Soft punctuation (`、`) stays attached
+    # to the next char because ASR rarely emits it as a leading prefix
+    # and the segment-builder handles soft splits via punctuation rules
+    # downstream.
     if len(token.text) <= 1 or token.text[0] not in JAPANESE_HARD_PUNCTUATION:
         return [token]
 
@@ -296,6 +304,7 @@ def _should_start_new_utterance(
         and not unsafe_start
         and not _is_short_soft_fragment(current, options)
         and not _would_create_short_orphan_tail(tokens, token_index, options)
+        and not _is_dragged_single_kana(current, options)
     ):
         return True
 
@@ -336,13 +345,18 @@ def _choose_utterance_split_index(
     if not exceeds_limit:
         return None
 
-    return _find_best_utterance_split_index(current, options) or len(current)
+    split_index = _find_best_utterance_split_index(current, options)
+    return split_index if split_index is not None else len(current)
 
 
 def _find_best_utterance_split_index(
     tokens: list[WordToken], options: SrtFormatOptions
 ) -> int | None:
-    for index in range(len(tokens) - 2, -1, -1):
+    # Walk every index from the end so that a punctuation at the
+    # very last token is also considered — splitting at len(tokens)
+    # emits the whole accumulated phrase and starts the next
+    # utterance fresh with the incoming token.
+    for index in range(len(tokens) - 1, -1, -1):
         token = tokens[index]
         if not (
             _ends_with_split_punctuation(token.text, options)
@@ -363,6 +377,21 @@ def _is_short_soft_fragment(
         return False
     text = _join_token_texts(tokens, options)
     return len(text) <= options.max_orphan_tail_chars
+
+
+def _is_dragged_single_kana(
+    current: list[WordToken], options: SrtFormatOptions
+) -> bool:
+    """Current is a single drawn-out kana (e.g. `さ`, `そ`, `あ` held
+    for ≥ DRAG_FILLER_MIN_DURATION_S). Splitting would strand it as
+    its own utterance; instead it should attach to the next phrase."""
+    if len(current) != 1:
+        return False
+    text = current[0].text.strip()
+    if len(text) != 1 or text in NO_SPACE_BEFORE:
+        return False
+    duration = current[0].end - current[0].start
+    return duration >= options.drag_filler_min_duration_s
 
 
 def _would_create_short_orphan_tail(
@@ -460,7 +489,7 @@ def _merge_overlapping_blocks(
             and len(previous.utterances) + len(block.utterances)
             <= options.max_utterances_per_block
             and _rendered_line_count(
-                _line_count_utterance_preview(
+                _inline_same_speaker_utterances(
                     [*previous.utterances, *block.utterances], options
                 ),
                 options,
@@ -492,54 +521,28 @@ def _resolve_block_overlaps(
             current.end = current.start + options.min_segment_duration_s
 
 
-def _inline_short_same_speaker_utterances(
-    blocks: list[SubtitleBlock], options: SrtFormatOptions
-) -> None:
-    for block in blocks:
-        if len(block.utterances) < 2:
-            continue
-        if len({utterance.speaker_id for utterance in block.utterances}) != 1:
-            continue
-
-        inlined: list[Utterance] = []
-        for utterance in block.utterances:
-            if inlined and _can_inline_same_speaker_utterance(
-                inlined[-1], utterance, options
-            ):
-                inlined[-1].text = f"{inlined[-1].text} {utterance.text}"
-                inlined[-1].end = max(inlined[-1].end, utterance.end)
-            else:
-                inlined.append(utterance)
-        block.utterances = inlined
-
-
-def _line_count_utterance_preview(
+def _inline_same_speaker_utterances(
     utterances: list[Utterance], options: SrtFormatOptions
 ) -> list[Utterance]:
-    if len({utterance.speaker_id for utterance in utterances}) != 1:
-        return utterances
-    return _inline_short_same_speaker_utterance_preview(utterances, options)
+    """Return a new list with adjacent short same-speaker utterances
+    inlined onto one line (e.g. 「何？ 何？ 何？」). Multi-speaker
+    input is returned as a shallow copy unchanged."""
+    if len({u.speaker_id for u in utterances}) != 1:
+        return list(utterances)
 
-
-def _inline_short_same_speaker_utterance_preview(
-    utterances: list[Utterance], options: SrtFormatOptions
-) -> list[Utterance]:
-    preview: list[Utterance] = []
-    for utterance in utterances:
-        copy = Utterance(
-            speaker_id=utterance.speaker_id,
-            start=utterance.start,
-            end=utterance.end,
-            text=utterance.text,
-        )
-        if preview and _can_inline_same_speaker_utterance(
-            preview[-1], copy, options
-        ):
-            preview[-1].text = f"{preview[-1].text} {copy.text}"
-            preview[-1].end = max(preview[-1].end, copy.end)
+    inlined: list[Utterance] = []
+    for u in utterances:
+        if inlined and _can_inline_same_speaker_utterance(inlined[-1], u, options):
+            last = inlined[-1]
+            inlined[-1] = Utterance(
+                speaker_id=last.speaker_id,
+                start=last.start,
+                end=max(last.end, u.end),
+                text=f"{last.text} {u.text}",
+            )
         else:
-            preview.append(copy)
-    return preview
+            inlined.append(u)
+    return inlined
 
 
 def _can_inline_same_speaker_utterance(
@@ -667,7 +670,15 @@ def _find_wrap_index(text: str, options: SrtFormatOptions) -> int:
     max_chars = options.max_characters_per_line
     n = len(text)
     hi = min(max_chars, n - 1)
-    lo = max(1, n - max_chars)
+    # When the utterance fits in two lines (n <= 2 * max_chars) keep
+    # `lo = n - max_chars` so the second line also stays within the
+    # cap. When it doesn't fit, line 2+ will wrap recursively, so we
+    # only require a non-empty line 1 — letting the scorer pick a
+    # safe break instead of greedy-cutting mid-word at max_chars.
+    if n <= 2 * max_chars:
+        lo = max(1, n - max_chars)
+    else:
+        lo = 1
     if lo > hi:
         return max_chars
 

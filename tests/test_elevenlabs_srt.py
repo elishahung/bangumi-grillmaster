@@ -688,6 +688,68 @@ class ElevenLabsSrtTests(unittest.TestCase):
         self.assertNotIn("\nち\n", srt.rstrip("\n") + "\n")
         self.assertNotIn("ち\nょ", srt)
 
+    def test_silence_does_not_orphan_drag_before_long_phrase(self):
+        # Speaker holds 'そ' for ~0.8s, pauses 1.5s, then says a long
+        # phrase that ends with '。'. The orphan-tail check can't help
+        # (the upcoming phrase is too long to be a tail), so the
+        # drag-current check is what prevents 'そ' from becoming its
+        # own block.
+        payload = {
+            "words": [
+                word("そ", 0.0, 0.82, "speaker_0"),
+                word("う", 2.32, 2.40, "speaker_0"),
+                word("いう感じで", 2.40, 2.90, "speaker_0"),
+                word("私が好きな回もありまして。", 2.90, 4.20, "speaker_0"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("そういう感じで私が好きな回もありまして。", srt)
+        self.assertNotIn("\nそ\n", srt.rstrip("\n") + "\n")
+
+    def test_split_at_terminal_hard_punct_when_segment_overflows(self):
+        # When current already ends with '。' and adding the next token
+        # would exceed max_segment_chars, the natural split point is
+        # right after the '。'. Earlier code skipped the last token in
+        # _find_best_utterance_split_index so it fell back to an
+        # earlier '、', merging two separate sentences.
+        payload = {
+            "words": [
+                word("これは長めの文章です。", 0.0, 2.5, "speaker_0"),
+                word("そして二つ目の長めの文章です。", 4.0, 6.5, "speaker_0"),
+            ]
+        }
+
+        srt = _convert_payload_with_options(
+            payload, SrtFormatOptions(max_segment_chars=20)
+        )
+
+        # Two separate utterances → not joined into one line.
+        self.assertNotIn(
+            "これは長めの文章です。そして二つ目の長めの文章です。", srt
+        )
+        self.assertIn("これは長めの文章です。", srt)
+        self.assertIn("そして二つ目の長めの文章です。", srt)
+
+    def test_long_utterance_wraps_at_clause_boundaries_not_mid_word(self):
+        # A 50-char utterance must wrap to 3 lines. Earlier the first
+        # line would greedy-cut at max_chars, splitting `言った` into
+        # `言っ` / `た`. The relaxed `lo` lets the scorer find a clean
+        # break at '、' instead.
+        text = (
+            "うん、それでいいって言って、"
+            "この人がワーって言ったタイミングで"
+            "今の高橋私はめっちゃ好きって言ってる。"
+        )
+        payload = {"words": [word(text, 0.0, 7.0, "speaker_0")]}
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertNotIn("言っ\nた", srt)
+        # Verb stem 言っ followed by past-tense た must stay together.
+        self.assertIn("言った", srt)
+
     def test_silence_split_still_fires_when_upcoming_tail_is_long(self):
         # A different-speaker boundary still splits, even if the next
         # speaker's first utterance is short.
