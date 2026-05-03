@@ -58,6 +58,7 @@ class SrtFormatOptions:
     max_lines_per_block: int = 2
     inline_short_same_speaker_utterances: bool = True
     max_inline_short_utterance_chars: int = 8
+    max_orphan_tail_chars: int = 8
     min_segment_duration_s: float = 0.35
     split_on_punctuation: str = JAPANESE_HARD_PUNCTUATION
     soft_split_punctuation: str = JAPANESE_SOFT_PUNCTUATION
@@ -185,13 +186,15 @@ def _build_utterances(
     utterances: list[Utterance] = []
     current: list[WordToken] = []
 
-    for token in tokens:
+    for index, token in enumerate(tokens):
         if not current:
             current.append(token)
             continue
 
         previous = current[-1]
-        if _should_start_new_utterance(current, previous, token, options):
+        if _should_start_new_utterance(
+            current, previous, token, tokens, index, options
+        ):
             utterances.append(_tokens_to_utterance(current, options))
             current = [token]
         else:
@@ -207,6 +210,8 @@ def _should_start_new_utterance(
     current: list[WordToken],
     previous: WordToken,
     token: WordToken,
+    tokens: list[WordToken],
+    token_index: int,
     options: SrtFormatOptions,
 ) -> bool:
     if token.speaker_id != previous.speaker_id:
@@ -229,11 +234,36 @@ def _should_start_new_utterance(
     ):
         return True
     if len(prospective_text) > options.max_segment_chars and not unsafe_start:
+        if _would_create_short_orphan_tail(tokens, token_index, options):
+            return False
         return True
     return (
         prospective_duration > options.max_segment_duration_s
         and not unsafe_start
+        and not _would_create_short_orphan_tail(tokens, token_index, options)
     )
+
+
+def _would_create_short_orphan_tail(
+    tokens: list[WordToken], start_index: int, options: SrtFormatOptions
+) -> bool:
+    if start_index >= len(tokens) or options.max_orphan_tail_chars <= 0:
+        return False
+
+    speaker_id = tokens[start_index].speaker_id
+    tail: list[WordToken] = []
+    for index in range(start_index, len(tokens)):
+        token = tokens[index]
+        if token.speaker_id != speaker_id:
+            break
+        tail.append(token)
+        if _ends_with_split_punctuation(token.text, options):
+            break
+
+    if not tail or not _ends_with_split_punctuation(tail[-1].text, options):
+        return False
+    text = _join_token_texts(tail, options)
+    return len(text) <= options.max_orphan_tail_chars
 
 
 def _tokens_to_utterance(

@@ -210,6 +210,95 @@ class ElevenLabsSrtTests(unittest.TestCase):
         self.assertIn("2\n00:00:27,020 --> 00:00:27,500\nかかりました。", srt)
         self.assertNotIn("-かかりました。", srt)
 
+    def test_keeps_short_sentence_tail_with_previous_long_utterance(self):
+        payload = {
+            "words": [
+                word("続", 409.55, 409.65, "speaker_1"),
+                word("い", 409.65, 409.75, "speaker_1"),
+                word("て", 409.75, 409.83, "speaker_1"),
+                word("決", 409.83, 410.07, "speaker_1"),
+                word("勝", 410.17, 410.25, "speaker_1"),
+                word("２", 410.29, 410.59, "speaker_1"),
+                word("組", 410.59, 410.93, "speaker_1"),
+                word("目", 410.93, 411.27, "speaker_1"),
+                word("、", 411.27, 411.27, "speaker_1"),
+                word("B", 411.31, 411.33, "speaker_1"),
+                word("ブ", 411.59, 411.67, "speaker_1"),
+                word("ロ", 411.67, 411.73, "speaker_1"),
+                word("ッ", 411.73, 411.89, "speaker_1"),
+                word("ク", 411.89, 412.03, "speaker_1"),
+                word("を", 412.03, 412.15, "speaker_1"),
+                word("勝", 412.15, 412.31, "speaker_1"),
+                word("ち", 412.31, 412.45, "speaker_1"),
+                word("上", 412.45, 412.49, "speaker_1"),
+                word("が", 412.49, 412.63, "speaker_1"),
+                word("っ", 412.63, 412.71, "speaker_1"),
+                word("た", 412.71, 412.77, "speaker_1"),
+                word("の", 412.77, 412.85, "speaker_1"),
+                word("は", 412.85, 413.03, "speaker_1"),
+                word("こ", 413.03, 413.25, "speaker_1"),
+                word("の", 413.25, 413.39, "speaker_1"),
+                word("コ", 413.39, 413.45, "speaker_1"),
+                word("ン", 413.45, 413.55, "speaker_1"),
+                word("ビ", 413.55, 413.69, "speaker_1"),
+                word("で", 413.69, 413.81, "speaker_1"),
+                word("す", 413.81, 413.83, "speaker_1"),
+                word("。", 413.83, 413.83, "speaker_1"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("00:06:49,550 --> 00:06:53,830", srt)
+        self.assertNotIn("\n2\n", srt)
+
+    def test_keeps_question_tail_before_close_speaker_reply(self):
+        payload = {
+            "words": [
+                word("さ", 1056.0, 1056.12, "speaker_9"),
+                word("あ", 1056.12, 1056.34, "speaker_9"),
+                word("皆", 1056.34, 1056.48, "speaker_9"),
+                word("さ", 1056.48, 1056.56, "speaker_9"),
+                word("ん", 1056.56, 1056.66, "speaker_9"),
+                word("、", 1056.66, 1056.66, "speaker_9"),
+                word("最", 1056.78, 1056.98, "speaker_9"),
+                word("後", 1056.98, 1057.08, "speaker_9"),
+                word("の", 1057.08, 1057.22, "speaker_9"),
+                word("投", 1057.22, 1057.46, "speaker_9"),
+                word("票", 1057.52, 1057.7, "speaker_9"),
+                word("前", 1057.7, 1057.78, "speaker_9"),
+                word("に", 1057.78, 1058.04, "speaker_9"),
+                word("一", 1058.04, 1058.24, "speaker_9"),
+                word("言", 1058.24, 1058.62, "speaker_9"),
+                word("ず", 1058.62, 1058.68, "speaker_9"),
+                word("つ", 1058.68, 1059.08, "speaker_9"),
+                word("羊", 1059.08, 1059.32, "speaker_9"),
+                word("寝", 1059.32, 1059.4, "speaker_9"),
+                word("入", 1059.4, 1059.58, "speaker_9"),
+                word("り", 1059.58, 1059.76, "speaker_9"),
+                word("い", 1059.76, 1059.84, "speaker_9"),
+                word("か", 1059.84, 1059.98, "speaker_9"),
+                word("が", 1059.98, 1060.02, "speaker_9"),
+                word("で", 1060.02, 1060.2, "speaker_9"),
+                word("す", 1060.2, 1060.3, "speaker_9"),
+                word("か", 1060.3, 1060.46, "speaker_9"),
+                word("？", 1060.46, 1060.54, "speaker_9"),
+                word("は", 1060.6, 1060.66, "speaker_10"),
+                word("い", 1060.66, 1060.84, "speaker_10"),
+                word("、", 1060.84, 1060.84, "speaker_10"),
+                word("ちょっと", 1060.86, 1061.12, "speaker_10"),
+                word("うちだけ", 1061.12, 1061.86, "speaker_10"),
+                word("推薦人が", 1061.86, 1062.36, "speaker_10"),
+                word("帰ってしまったんですけど。", 1062.36, 1063.5, "speaker_10"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("ですか？", srt)
+        self.assertIn("2\n00:17:40,600", srt)
+        self.assertNotIn("-すか？", srt)
+
     def test_limits_close_three_speaker_turns_to_two_lines(self):
         payload = {
             "words": [
