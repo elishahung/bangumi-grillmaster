@@ -154,7 +154,6 @@ class Gemini:
                     total_chunks=len(chunks),
                     interval_seconds=settings.gemini_chunk_frame_interval_seconds,
                     max_side=settings.gemini_chunk_frame_max_side,
-                    is_last_chunk=i == len(chunks) - 1,
                 )
                 return await translate_chunk(
                     self.client,

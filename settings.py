@@ -57,9 +57,9 @@ class Settings(BaseSettings):
         default="HIGH",
         description="Thinking level for translation calls. One of: LOW, MEDIUM, HIGH",
     )
-    gemini_pre_pass_max_frames: int = Field(
-        default=10,
-        description="Maximum number of evenly sampled reference frames attached to Gemini pre-pass",
+    gemini_pre_pass_frame_interval_seconds: int = Field(
+        default=120,
+        description="Absolute video frame sampling interval in seconds for Gemini pre-pass inputs",
     )
     gemini_pre_pass_frame_max_side: int = Field(
         default=768,

@@ -23,7 +23,7 @@ class GeminiAssetsTests(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(path, ignore_errors=True))
         return path
 
-    def test_prepare_pre_pass_media_assets_uses_even_spacing(self):
+    def test_prepare_pre_pass_media_assets_uses_interval_spacing(self):
         root = self._make_temp_dir()
         video_path = root / "video.mp4"
         audio_path = root / "audio.opus"
@@ -31,7 +31,7 @@ class GeminiAssetsTests(unittest.TestCase):
         with (
             patch(
                 "services.gemini.assets.MediaProcessor.get_media_duration",
-                return_value=60.0,
+                return_value=305.0,
             ),
             patch(
                 "services.gemini.assets.MediaProcessor.extract_video_frame"
@@ -41,21 +41,22 @@ class GeminiAssetsTests(unittest.TestCase):
                 video_path=video_path,
                 audio_path=audio_path,
                 cache_root=root / "pre_pass",
-                max_frames=5,
+                interval_seconds=120,
                 max_side=768,
             )
 
         self.assertEqual(
             [frame.timestamp_seconds for frame in assets.frames],
-            [10.0, 20.0, 30.0, 40.0, 50.0],
+            [0.0, 120.0, 240.0, 305.0],
         )
-        self.assertEqual(extract_frame.call_count, 5)
+        self.assertEqual(extract_frame.call_count, 4)
         self.assertEqual(assets.audio.path, audio_path)
         self.assertEqual(assets.audio.mime_type, "audio/ogg")
         self.assertTrue(assets.manifest_path.exists())
         manifest = json.loads(
             assets.manifest_path.read_text(encoding="utf-8")
         )
+        self.assertEqual(manifest["interval_seconds"], 120)
         self.assertEqual(manifest["frames"][0]["mime_type"], "image/jpeg")
         self.assertEqual(manifest["audio"]["path"], str(audio_path))
 
@@ -95,12 +96,11 @@ class GeminiAssetsTests(unittest.TestCase):
                 total_chunks=2,
                 interval_seconds=60,
                 max_side=768,
-                is_last_chunk=False,
             )
 
         self.assertEqual(
             [frame.timestamp_seconds for frame in assets.frames],
-            [61.0, 120.0],
+            [61.0, 120.0, 180.0],
         )
         manifest = json.loads(
             assets.manifest_path.read_text(encoding="utf-8")

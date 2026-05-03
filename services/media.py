@@ -247,7 +247,11 @@ class MediaProcessor:
         include_start: bool,
         include_end: bool,
     ) -> list[float]:
-        """Return deterministic absolute timestamps within a time range."""
+        """Return deterministic absolute timestamps within a time range.
+
+        When ``include_end`` is True, ``end_seconds`` is always added even if it
+        does not align with the interval lattice.
+        """
         if interval_seconds <= 0:
             raise ValueError("interval_seconds must be positive")
         timestamps: set[float] = set()
@@ -259,14 +263,13 @@ class MediaProcessor:
         if current < start_seconds:
             current += interval_seconds
 
-        while current < end_seconds or (
-            include_end and abs(current - end_seconds) < 1e-6
-        ):
-            if start_seconds <= current < end_seconds or (
-                include_end and current <= end_seconds
-            ):
+        while current < end_seconds:
+            if start_seconds <= current:
                 timestamps.add(round(current, 3))
             current += interval_seconds
+
+        if include_end:
+            timestamps.add(round(end_seconds, 3))
 
         return sorted(timestamps)
 

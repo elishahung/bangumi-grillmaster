@@ -52,7 +52,7 @@ def prepare_pre_pass_media_assets(
     video_path: Path,
     audio_path: Path,
     cache_root: Path,
-    max_frames: int,
+    interval_seconds: int,
     max_side: int,
 ) -> PrePassMediaAssets:
     cache_root.mkdir(parents=True, exist_ok=True)
@@ -60,10 +60,13 @@ def prepare_pre_pass_media_assets(
     manifest_path = cache_root / "assets.json"
 
     duration = MediaProcessor.get_media_duration(video_path)
-    timestamps = [
-        round(ts, 3)
-        for ts in MediaProcessor.evenly_spaced_timestamps(duration, max_frames)
-    ]
+    timestamps = MediaProcessor.absolute_interval_timestamps(
+        start_seconds=0.0,
+        end_seconds=duration,
+        interval_seconds=interval_seconds,
+        include_start=True,
+        include_end=True,
+    )
     frames = [
         _build_frame_asset(
             video_path=video_path,
@@ -80,7 +83,7 @@ def prepare_pre_pass_media_assets(
                 "video_path": str(video_path),
                 "audio": audio_ref.model_dump(mode="json"),
                 "duration_seconds": duration,
-                "max_frames": max_frames,
+                "interval_seconds": interval_seconds,
                 "max_side": max_side,
                 "frames": [
                     {
@@ -111,7 +114,6 @@ def prepare_chunk_media_assets(
     total_chunks: int,
     interval_seconds: int,
     max_side: int,
-    is_last_chunk: bool,
 ) -> ChunkMediaAssets:
     range_info = _chunk_time_range(chunk)
     chunk_slug = f"{chunk[0].index:04d}-{chunk[-1].index:04d}"
@@ -127,7 +129,7 @@ def prepare_chunk_media_assets(
         end_seconds=range_info.end_seconds,
         interval_seconds=interval_seconds,
         include_start=True,
-        include_end=is_last_chunk,
+        include_end=True,
     )
 
     digest = hashlib.sha256(

@@ -110,7 +110,7 @@ async def run_pre_pass(
         video_path=video_path,
         audio_path=audio_path,
         cache_root=pre_pass_cache_dir,
-        max_frames=settings.gemini_pre_pass_max_frames,
+        interval_seconds=settings.gemini_pre_pass_frame_interval_seconds,
         max_side=settings.gemini_pre_pass_frame_max_side,
     )
     frame_timestamps = [
@@ -131,7 +131,7 @@ async def run_pre_pass(
         (
             system_instruction
             + user_message
-            + str(settings.gemini_pre_pass_max_frames)
+            + str(settings.gemini_pre_pass_frame_interval_seconds)
             + str(settings.gemini_pre_pass_frame_max_side)
         ).encode("utf-8")
     ).hexdigest()
