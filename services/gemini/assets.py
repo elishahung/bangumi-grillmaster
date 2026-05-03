@@ -60,9 +60,14 @@ def prepare_pre_pass_media_assets(
     manifest_path = cache_root / "assets.json"
 
     duration = MediaProcessor.get_media_duration(video_path)
+    # Back the boundary off by a small offset so ffmpeg can seek to a real
+    # decoded frame; seeking to exactly `duration` typically fails because
+    # there is no frame at the end-of-stream timestamp.
+    last_frame_offset = 0.1
+    end_seconds = max(0.0, duration - last_frame_offset)
     timestamps = MediaProcessor.absolute_interval_timestamps(
         start_seconds=0.0,
-        end_seconds=duration,
+        end_seconds=end_seconds,
         interval_seconds=interval_seconds,
         include_start=True,
         include_end=True,

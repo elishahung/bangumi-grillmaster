@@ -47,7 +47,7 @@ class GeminiAssetsTests(unittest.TestCase):
 
         self.assertEqual(
             [frame.timestamp_seconds for frame in assets.frames],
-            [0.0, 120.0, 240.0, 305.0],
+            [0.0, 120.0, 240.0, 304.9],
         )
         self.assertEqual(extract_frame.call_count, 4)
         self.assertEqual(assets.audio.path, audio_path)
