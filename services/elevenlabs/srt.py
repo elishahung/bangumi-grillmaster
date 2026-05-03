@@ -58,7 +58,7 @@ JAPANESE_UNSAFE_SEGMENT_STARTS = {
 # ---------------------------------------------------------------------
 
 MAX_CHARACTERS_PER_LINE = 24
-MAX_SEGMENT_CHARS = 48
+MAX_SEGMENT_CHARS = 44
 MAX_SEGMENT_DURATION_S = 0.0  # 0 disables duration-based splitting
 SEGMENT_ON_SILENCE_LONGER_THAN_S = 0.7
 MERGE_SPEAKER_TURNS_GAP_S = 0.45
