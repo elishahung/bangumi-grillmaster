@@ -361,14 +361,29 @@ async def translate_chunk(
         blocks = _validate_output(chunk, raw_text)
     except ValueError as validation_error:
         error_str = str(validation_error)
-        canonical_text = canonicalize_by_timecode_subset(source_srt, raw_text)
-        canonical_method = "Timecode subset"
-        if canonical_text is None:
-            canonical_text = canonicalize_by_position(source_srt, raw_text)
-            canonical_method = "Positional"
-        if canonical_text is None:
-            canonical_text = canonicalize_by_aligned_sequence(source_srt, raw_text)
-            canonical_method = "Aligned sequence"
+        # Local canonicalizers assume the output is structurally parseable;
+        # a parse-level ValueError (e.g. malformed timecode) means we should
+        # bypass them and let the LLM fix layer reason about the breakage
+        # rather than have local heuristics guess at corrupt structure.
+        canonical_text: str | None = None
+        canonical_method = ""
+        try:
+            canonical_text = canonicalize_by_timecode_subset(source_srt, raw_text)
+            canonical_method = "Timecode subset"
+            if canonical_text is None:
+                canonical_text = canonicalize_by_position(source_srt, raw_text)
+                canonical_method = "Positional"
+            if canonical_text is None:
+                canonical_text = canonicalize_by_aligned_sequence(
+                    source_srt, raw_text
+                )
+                canonical_method = "Aligned sequence"
+        except ValueError as canonical_parse_error:
+            logger.warning(
+                f"{prefix} Skipping local canonicalization "
+                f"(output not structurally parseable: {canonical_parse_error})"
+            )
+            canonical_text = None
         if canonical_text is not None:
             try:
                 blocks = _validate_output(chunk, canonical_text)
