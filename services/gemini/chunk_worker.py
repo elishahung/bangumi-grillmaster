@@ -361,29 +361,29 @@ async def translate_chunk(
         blocks = _validate_output(chunk, raw_text)
     except ValueError as validation_error:
         error_str = str(validation_error)
-        # Local canonicalizers assume the output is structurally parseable;
-        # a parse-level ValueError (e.g. malformed timecode) means we should
-        # bypass them and let the LLM fix layer reason about the breakage
-        # rather than have local heuristics guess at corrupt structure.
+        # Each canonicalizer is attempted independently. Some require a
+        # structurally parseable output (e.g. timecode-subset uses strict
+        # parse_srt) and may raise ValueError on malformed timecodes; that
+        # must not block the lenient-based canonicalizers that follow.
         canonical_text: str | None = None
         canonical_method = ""
-        try:
-            canonical_text = canonicalize_by_timecode_subset(source_srt, raw_text)
-            canonical_method = "Timecode subset"
-            if canonical_text is None:
-                canonical_text = canonicalize_by_position(source_srt, raw_text)
-                canonical_method = "Positional"
-            if canonical_text is None:
-                canonical_text = canonicalize_by_aligned_sequence(
-                    source_srt, raw_text
+        for method_name, canonicalizer in (
+            ("Timecode subset", canonicalize_by_timecode_subset),
+            ("Positional", canonicalize_by_position),
+            ("Aligned sequence", canonicalize_by_aligned_sequence),
+        ):
+            try:
+                candidate = canonicalizer(source_srt, raw_text)
+            except ValueError as canonical_parse_error:
+                logger.warning(
+                    f"{prefix} {method_name} canonicalization not parseable: "
+                    f"{canonical_parse_error}"
                 )
-                canonical_method = "Aligned sequence"
-        except ValueError as canonical_parse_error:
-            logger.warning(
-                f"{prefix} Skipping local canonicalization "
-                f"(output not structurally parseable: {canonical_parse_error})"
-            )
-            canonical_text = None
+                continue
+            if candidate is not None:
+                canonical_text = candidate
+                canonical_method = method_name
+                break
         if canonical_text is not None:
             try:
                 blocks = _validate_output(chunk, canonical_text)

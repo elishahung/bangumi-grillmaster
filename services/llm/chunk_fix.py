@@ -31,8 +31,11 @@ DEEPSEEK_PRICE_PER_1M_CACHE_HIT_INPUT = 0.0028
 DEEPSEEK_PRICE_PER_1M_CACHE_MISS_INPUT = 0.14
 DEEPSEEK_PRICE_PER_1M_OUTPUT = 0.28
 _BLOCK_SEPARATOR = re.compile(r"\r?\n\r?\n")
+# Lenient timecode pattern. The strict parser in chunker.py requires zero-padded
+# fields; this lenient form accepts malformed-but-timecode-shaped lines so the
+# lenient parser can strip them as metadata instead of preserving them as text.
 _TIMECODE_LINE = re.compile(
-    r"^\d{2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d{3}$"
+    r"^\d{1,2}:\d{1,2}:\d{1,2}[,.]\d{1,3}\s*-->\s*\d{1,2}:\d{1,2}:\d{1,2}[,.]\d{1,3}$"
 )
 
 
@@ -72,7 +75,9 @@ def _build_user_message(source_srt: str, broken_output: str, error: str) -> str:
     )
 
 
-def _parse_output_blocks_lenient(output_srt: str) -> list[SrtBlock]:
+def _parse_output_blocks_lenient(
+    output_srt: str, start_index: int = 1
+) -> list[SrtBlock]:
     """Parse broken model output while preserving text as much as possible.
 
     The normal SRT parser is intentionally strict and raises on malformed index
@@ -82,13 +87,18 @@ def _parse_output_blocks_lenient(output_srt: str) -> list[SrtBlock]:
     - accepts a valid timecode found in the first few lines;
     - preserves text lines without translating or normalizing them.
 
+    `start_index` controls the physical-order numbering. The default of 1 is
+    used by local canonicalizers that rebuild from source metadata anyway.
+    The LLM-facing path passes the source SRT's first index so output indices
+    share the same numeric range as source, making 1-to-1 mappings obvious.
+
     If no valid timecode exists, a dummy timecode is used only so the text can
     survive into later local/LLM assignment steps. The dummy timecode is never
     allowed into final output because final metadata always comes from source.
     """
     blocks: list[SrtBlock] = []
     for ordinal, raw_block in enumerate(
-        _BLOCK_SEPARATOR.split(output_srt.strip()), start=1
+        _BLOCK_SEPARATOR.split(output_srt.strip()), start=start_index
     ):
         lines = raw_block.strip().splitlines()
         if not lines:
@@ -228,11 +238,17 @@ def canonicalize_by_aligned_sequence(
 
         gap_outputs = output_blocks[previous_output + 1 : next_output]
         gap_source_positions = range(previous_source + 1, next_source)
-        for source_position, output_block in zip(gap_source_positions, gap_outputs):
+        for source_position, output_block in zip(
+            gap_source_positions, gap_outputs
+        ):
             text_by_source_position[source_position] = output_block.text
 
-        if next_output < len(output_blocks) and next_source < len(source_blocks):
-            text_by_source_position[next_source] = output_blocks[next_output].text
+        if next_output < len(output_blocks) and next_source < len(
+            source_blocks
+        ):
+            text_by_source_position[next_source] = output_blocks[
+                next_output
+            ].text
 
         previous_output = next_output
         previous_source = next_source
@@ -251,28 +267,39 @@ def canonicalize_by_aligned_sequence(
     return fixed_text
 
 
-def _normalize_output_indices(output_srt: str) -> str:
+def _normalize_output_indices(output_srt: str, start_index: int) -> str:
     """Make output block indices match physical order before asking the LLM.
 
     The original printed output indices are often part of the bug, so the LLM
     should not reference them. Before each LLM retry, current broken output is
-    rewritten with indices 1..N. The prompt calls these `output_index` values.
+    rewritten with sequential indices starting at `start_index` (the source
+    SRT's first index), so output and source share the same numeric range and
+    trivial 1-to-1 mappings appear as `output_index == source_index`.
     """
-    return serialize_srt(_parse_output_blocks_lenient(output_srt))
+    return serialize_srt(
+        _parse_output_blocks_lenient(output_srt, start_index=start_index)
+    )
 
 
 def _apply_block_assignments(
-    source_srt: str, output_srt: str, assignments: list[dict]
+    source_srt: str,
+    output_srt: str,
+    assignments: list[dict],
+    output_start_index: int,
 ) -> str:
     """Apply LLM-provided metadata assignments without touching text.
 
     Assignments map normalized output block indices to authoritative source
-    indices. Unassigned source blocks are intentionally emitted with empty text.
+    indices. `output_start_index` must match the value used when normalizing
+    the output before the LLM call so the assignment lookup keys agree.
+    Unassigned source blocks are intentionally emitted with empty text.
     Extra output blocks disappear. This keeps the LLM away from final SRT
     serialization and prevents it from rewriting translations.
     """
     source_blocks = parse_srt(source_srt)
-    output_blocks = _parse_output_blocks_lenient(output_srt)
+    output_blocks = _parse_output_blocks_lenient(
+        output_srt, start_index=output_start_index
+    )
     source_by_index = {block.index: block for block in source_blocks}
     output_by_index = {block.index: block for block in output_blocks}
     text_by_source_index: dict[int, str] = {}
@@ -440,7 +467,11 @@ async def fix_chunk_structure(
     """
     max_retries = settings.llm_chunk_fix_max_retries
     total_cost = 0.0
-    current_broken = _normalize_output_indices(broken_output)
+    source_blocks_for_offset = parse_srt(source_srt)
+    output_start_index = (
+        source_blocks_for_offset[0].index if source_blocks_for_offset else 1
+    )
+    current_broken = _normalize_output_indices(broken_output, output_start_index)
     current_error = error
     reasoning_effort = "high"
     last_exception: Exception | None = None
@@ -457,8 +488,13 @@ async def fix_chunk_structure(
             total_cost += cost
             assignments = _parse_assignment_response(text)
             fixed_text = _apply_block_assignments(
-                source_srt, current_broken, assignments
+                source_srt, current_broken, assignments, output_start_index
             )
+
+            for assignment in assignments:
+                logger.info(
+                    f"{log_prefix} Assignment: {assignment['output_index']} -> {assignment['source_index']}"
+                )
 
             logger.debug(
                 f"{log_prefix} Fix assignment count: {len(assignments)}"
@@ -471,7 +507,9 @@ async def fix_chunk_structure(
                     f"{log_prefix} Fix attempt {attempt}/{max_retries} still "
                     f"invalid: {validation_error}"
                 )
-                current_broken = _normalize_output_indices(fixed_text)
+                current_broken = _normalize_output_indices(
+                    fixed_text, output_start_index
+                )
                 current_error = str(validation_error)
                 last_exception = validation_error
             else:

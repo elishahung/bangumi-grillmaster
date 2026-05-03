@@ -13,7 +13,7 @@ You receive three things:
 - Do not output translated text.
 - Do not rewrite, improve, split, or merge translated text.
 - Return only assignments from normalized output block index numbers to source SRT index numbers.
-- `output_index` is the block index shown in the Broken translated SRT. The fix layer already normalized those indices to 1, 2, 3... in physical block order before this prompt.
+- `output_index` is the block index shown in the Broken translated SRT. The fix layer renumbered those indices in physical block order starting at the same value as the Source SRT's first index, so the output and source share the same numeric range. When a broken output block clearly corresponds to the source block with the same number, return `{"output_index": N, "source_index": N}`.
 - `source_index` is the index number from the authoritative Source SRT.
 - Omit output blocks that are extra or untrustworthy.
 - Omit source blocks that have no clear corresponding output block; local code will keep them empty.

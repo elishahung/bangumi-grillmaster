@@ -372,6 +372,88 @@ class ChunkFixTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(fixed)
 
+    async def test_lenient_parser_strips_malformed_timecode_line(self):
+        # Regression: a single-digit seconds field (00:19:9,956) used to fail
+        # the strict regex and leak into the text payload, producing duplicate
+        # metadata in the fixed SRT. Lenient parser must recognize it and
+        # strip it as metadata.
+        blocks = chunk_fix._parse_output_blocks_lenient(
+            "506\n00:19:57,516 --> 00:19:9,956\n正處於講求邏輯的搞笑受到評價的時代。\n"
+        )
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(
+            blocks[0].text, "正處於講求邏輯的搞笑受到評價的時代。"
+        )
+        self.assertNotIn("506", blocks[0].text)
+        self.assertNotIn("-->", blocks[0].text)
+
+    async def test_canonicalize_by_position_handles_malformed_timecode(self):
+        # End-to-end regression for the chunk_0487-0602 bug. The output has
+        # the same block count as source but one malformed timecode. After
+        # the regex is loosened, canonicalize_by_position must succeed and
+        # produce a clean fixed SRT with no duplicate metadata.
+        source = (
+            "505\n00:19:55,000 --> 00:19:57,000\nsource a\n\n"
+            "506\n00:19:57,516 --> 00:19:59,956\nsource b\n\n"
+            "507\n00:20:00,000 --> 00:20:02,000\nsource c\n"
+        )
+        broken = (
+            "505\n00:19:55,000 --> 00:19:57,000\ntranslated a\n\n"
+            "506\n00:19:57,516 --> 00:19:9,956\ntranslated b\n\n"
+            "507\n00:20:00,000 --> 00:20:02,000\ntranslated c\n"
+        )
+        fixed = chunk_fix.canonicalize_by_position(source, broken)
+
+        self.assertEqual(
+            fixed,
+            (
+                "505\n00:19:55,000 --> 00:19:57,000\ntranslated a\n\n"
+                "506\n00:19:57,516 --> 00:19:59,956\ntranslated b\n\n"
+                "507\n00:20:00,000 --> 00:20:02,000\ntranslated c\n"
+            ),
+        )
+
+    async def test_fix_chunk_structure_aligns_output_indices_with_source(self):
+        # Layer 3 regression: when LLM is invoked, the normalized broken
+        # output sent to the prompt must use indices starting at the source's
+        # first index (not 1..N).
+        FakeAsyncOpenAI.response = make_response(
+            content='{"assignments":[{"output_index":487,"source_index":487}]}',
+            cache_miss_tokens=100,
+            completion_tokens=100,
+        )
+
+        source = "487\n00:00:00,000 --> 00:00:01,000\nsource\n"
+        broken = "9999\n00:00:09,000 --> 00:00:10,000\ntranslated\n"
+
+        with (
+            patch.object(chunk_fix, "AsyncOpenAI", FakeAsyncOpenAI),
+            patch.object(chunk_fix.settings, "llm_chunk_fix_max_retries", 1),
+            patch.object(chunk_fix.settings, "deepseek_api_key", "test-key"),
+        ):
+            text, _cost = await chunk_fix.fix_chunk_structure(
+                source,
+                broken,
+                "invalid structure",
+                lambda _t: None,
+                "[test]",
+            )
+
+        self.assertEqual(
+            text, "487\n00:00:00,000 --> 00:00:01,000\ntranslated\n"
+        )
+        first_user_message = FakeAsyncOpenAI.create_calls[0]["messages"][1][
+            "content"
+        ]
+        # Normalized broken output must use source's first index (487), not 1.
+        self.assertIn(
+            "487\n00:00:09,000 --> 00:00:10,000\ntranslated",
+            first_user_message,
+        )
+        self.assertNotIn(
+            "1\n00:00:09,000 --> 00:00:10,000", first_user_message
+        )
+
     async def test_validate_output_fills_missing_blocks_with_empty_text(self):
         expected = [
             SrtBlock(
