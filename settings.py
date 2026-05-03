@@ -31,8 +31,11 @@ class Settings(BaseSettings):
         description="Maximum text characters per source SRT subtitle block",
     )
     elevenlabs_srt_max_segment_duration_s: float = Field(
-        default=4,
-        description="Maximum duration in seconds per source SRT subtitle block",
+        default=0.0,
+        description=(
+            "Maximum duration in seconds per source SRT subtitle block; "
+            "set to 0 to disable duration-based splitting"
+        ),
     )
     elevenlabs_srt_segment_on_silence_longer_than_s: float = Field(
         default=0.5,

@@ -48,7 +48,7 @@ class SrtFormatOptions:
 
     max_characters_per_line: int = 24
     max_segment_chars: int = 48
-    max_segment_duration_s: float = 5.5
+    max_segment_duration_s: float = 0.0
     segment_on_silence_longer_than_s: float = 0.7
     merge_speaker_turns_gap_s: float = 0.45
     merge_same_speaker_gap_s: float = 0.25
@@ -151,16 +151,38 @@ def _extract_tokens(
             continue
         if end < start:
             continue
-        tokens.append(
-            WordToken(
-                text=text,
-                start=float(start),
-                end=float(end),
-                speaker_id=item.get("speaker_id"),
+        tokens.extend(
+            _split_token_if_needed(
+                WordToken(
+                    text=text,
+                    start=float(start),
+                    end=float(end),
+                    speaker_id=item.get("speaker_id"),
+                ),
             )
         )
     tokens.sort(key=lambda token: (token.start, token.end))
     return tokens
+
+
+def _split_token_if_needed(token: WordToken) -> list[WordToken]:
+    if len(token.text) <= 1 or token.text[0] not in JAPANESE_HARD_PUNCTUATION:
+        return [token]
+
+    return [
+        WordToken(
+            text=token.text[0],
+            start=token.start,
+            end=token.start,
+            speaker_id=token.speaker_id,
+        ),
+        WordToken(
+            text=token.text[1:],
+            start=token.start,
+            end=token.end,
+            speaker_id=token.speaker_id,
+        ),
+    ]
 
 
 def _extract_word_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -191,10 +213,13 @@ def _build_utterances(
             current.append(token)
             continue
 
-        previous = current[-1]
-        if _should_start_new_utterance(
-            current, previous, token, tokens, index, options
-        ):
+        split_index = _choose_utterance_split_index(
+            current, token, tokens, index, options
+        )
+        if split_index is not None:
+            utterances.append(_tokens_to_utterance(current[:split_index], options))
+            current = [*current[split_index:], token]
+        elif _should_start_new_utterance(current, current[-1], token, options):
             utterances.append(_tokens_to_utterance(current, options))
             current = [token]
         else:
@@ -210,8 +235,6 @@ def _should_start_new_utterance(
     current: list[WordToken],
     previous: WordToken,
     token: WordToken,
-    tokens: list[WordToken],
-    token_index: int,
     options: SrtFormatOptions,
 ) -> bool:
     if token.speaker_id != previous.speaker_id:
@@ -220,12 +243,11 @@ def _should_start_new_utterance(
     if (
         token.start - previous.end > options.segment_on_silence_longer_than_s
         and not unsafe_start
+        and not _is_short_soft_fragment(current, options)
     ):
         return True
 
     text = _join_token_texts(current, options)
-    prospective_text = _join_token_texts([*current, token], options)
-    prospective_duration = token.end - current[0].start
     if _ends_with_split_punctuation(previous.text, options):
         return True
     if (
@@ -233,15 +255,62 @@ def _should_start_new_utterance(
         and len(text) >= options.max_characters_per_line
     ):
         return True
-    if len(prospective_text) > options.max_segment_chars and not unsafe_start:
-        if _would_create_short_orphan_tail(tokens, token_index, options):
-            return False
-        return True
-    return (
-        prospective_duration > options.max_segment_duration_s
-        and not unsafe_start
-        and not _would_create_short_orphan_tail(tokens, token_index, options)
+    return False
+
+
+def _choose_utterance_split_index(
+    current: list[WordToken],
+    token: WordToken,
+    tokens: list[WordToken],
+    token_index: int,
+    options: SrtFormatOptions,
+) -> int | None:
+    if token.speaker_id != current[-1].speaker_id:
+        return None
+
+    unsafe_start = _is_unsafe_segment_start(token.text)
+    if unsafe_start or _would_create_short_orphan_tail(tokens, token_index, options):
+        return None
+
+    prospective_text = _join_token_texts([*current, token], options)
+    prospective_duration = token.end - current[0].start
+    exceeds_duration = (
+        options.max_segment_duration_s > 0
+        and prospective_duration > options.max_segment_duration_s
     )
+    exceeds_limit = (
+        len(prospective_text) > options.max_segment_chars or exceeds_duration
+    )
+    if not exceeds_limit:
+        return None
+
+    return _find_best_utterance_split_index(current, options) or len(current)
+
+
+def _find_best_utterance_split_index(
+    tokens: list[WordToken], options: SrtFormatOptions
+) -> int | None:
+    for index in range(len(tokens) - 2, -1, -1):
+        token = tokens[index]
+        if not (
+            _ends_with_split_punctuation(token.text, options)
+            or _ends_with_soft_split_punctuation(token.text, options)
+        ):
+            continue
+
+        split_index = index + 1
+        if _join_token_texts(tokens[:split_index], options):
+            return split_index
+    return None
+
+
+def _is_short_soft_fragment(
+    tokens: list[WordToken], options: SrtFormatOptions
+) -> bool:
+    if not tokens or not _ends_with_soft_split_punctuation(tokens[-1].text, options):
+        return False
+    text = _join_token_texts(tokens, options)
+    return len(text) <= options.max_orphan_tail_chars
 
 
 def _would_create_short_orphan_tail(
@@ -470,7 +539,10 @@ def _can_merge_into_block(
         > options.max_lines_per_block
     ):
         return False
-    if utterance.end - block.start > options.max_segment_duration_s:
+    if (
+        options.max_segment_duration_s > 0
+        and utterance.end - block.start > options.max_segment_duration_s
+    ):
         return False
     if _block_text_length(block) + len(utterance.text) > options.max_segment_chars:
         return False

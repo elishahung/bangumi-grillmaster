@@ -299,6 +299,185 @@ class ElevenLabsSrtTests(unittest.TestCase):
         self.assertIn("2\n00:17:40,600", srt)
         self.assertNotIn("-すか？", srt)
 
+    def test_prefers_soft_punctuation_when_duration_limit_is_hit(self):
+        payload = {
+            "words": [
+                word("ク", 53.58, 53.62, "speaker_2"),
+                word("イ", 53.62, 53.78, "speaker_2"),
+                word("ズ", 53.78, 53.96, "speaker_2"),
+                word("王", 53.96, 54.12, "speaker_2"),
+                word("の", 54.12, 54.42, "speaker_2"),
+                word("リ", 54.42, 54.66, "speaker_2"),
+                word("ベ", 54.66, 54.78, "speaker_2"),
+                word("ン", 54.78, 54.94, "speaker_2"),
+                word("ジ", 54.94, 55.339, "speaker_2"),
+                word("か", 55.34, 55.38, "speaker_2"),
+                word("、", 55.38, 55.38, "speaker_2"),
+                word("は", 56.4, 56.48, "speaker_2"),
+                word("た", 56.48, 56.62, "speaker_2"),
+                word("ま", 56.62, 56.72, "speaker_2"),
+                word("た", 56.72, 57.3, "speaker_2"),
+                word("芸", 57.3, 57.42, "speaker_2"),
+                word("人", 57.42, 57.62, "speaker_2"),
+                word("た", 57.62, 57.7, "speaker_2"),
+                word("ち", 57.7, 57.82, "speaker_2"),
+                word("が", 57.82, 58.18, "speaker_2"),
+                word("跳", 58.18, 58.38, "speaker_2"),
+                word("ね", 58.38, 58.46, "speaker_2"),
+                word("返", 58.46, 58.86, "speaker_2"),
+                word("す", 58.86, 58.96, "speaker_2"),
+                word("か", 58.96, 59.14, "speaker_2"),
+                word("。", 59.14, 59.14, "speaker_2"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(
+            payload, SrtFormatOptions(max_segment_duration_s=4.0)
+        )
+
+        self.assertIn("クイズ王のリベンジか、", srt)
+        self.assertIn("はたまた芸人たちが跳ね返すか。", srt)
+        self.assertNotIn("はたまた芸\n\n", srt)
+
+    def test_splits_leading_hard_punctuation_without_orphaning_year(self):
+        payload = {
+            "words": [
+                word("リ", 17.96, 18.2, "speaker_2"),
+                word("ベ", 18.2, 18.24, "speaker_2"),
+                word("ン", 18.24, 18.36, "speaker_2"),
+                word("ジ", 18.36, 18.5, "speaker_2"),
+                word("に", 18.5, 18.62, "speaker_2"),
+                word("燃", 18.62, 18.72, "speaker_2"),
+                word("え", 18.72, 18.84, "speaker_2"),
+                word("る", 18.84, 19.32, "speaker_2"),
+                word("本", 19.32, 19.52, "speaker_2"),
+                word("気", 19.52, 19.68, "speaker_2"),
+                word("の", 19.68, 19.82, "speaker_2"),
+                word("ク", 19.82, 19.9, "speaker_2"),
+                word("イ", 19.9, 20.1, "speaker_2"),
+                word("ズ", 20.1, 20.26, "speaker_2"),
+                word("王", 20.26, 20.64, "speaker_2"),
+                word("。1934", 20.64, 22.5, "speaker_2"),
+                word("年", 22.5, 22.72, "speaker_2"),
+                word("、", 22.72, 22.72, "speaker_2"),
+                word("吉", 23.26, 23.44, "speaker_2"),
+                word("本", 23.44, 23.72, "speaker_2"),
+                word("が", 23.72, 24.279, "speaker_2"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(
+            payload,
+            SrtFormatOptions(
+                max_segment_duration_s=4.0,
+                segment_on_silence_longer_than_s=0.5,
+            ),
+        )
+
+        self.assertIn("リベンジに燃える本気のクイズ王。", srt)
+        self.assertIn("1934年、吉本が", srt)
+        self.assertNotIn("\n1934年、\n", srt)
+
+    def test_duration_limit_does_not_split_japanese_compounds(self):
+        payload = {
+            "words": [
+                word("さ", 76.66, 76.72),
+                word("あ", 76.72, 76.73),
+                word("、", 76.73, 76.73),
+                word("今", 76.82, 76.94),
+                word("か", 76.94, 77.0),
+                word("ら", 77.0, 77.08),
+                word("皆", 77.08, 77.38),
+                word("さ", 77.38, 77.44),
+                word("ん", 77.44, 77.52),
+                word("に", 77.52, 77.58),
+                word("で", 77.58, 77.66),
+                word("す", 77.66, 77.72),
+                word("ね", 77.72, 77.86),
+                word("、", 77.86, 77.86),
+                word("様", 78.08, 78.2),
+                word("々", 78.2, 78.56),
+                word("な", 78.56, 78.7),
+                word("パ", 78.7, 78.86),
+                word("タ", 78.86, 78.92),
+                word("ー", 78.92, 79.1),
+                word("ン", 79.1, 79.3),
+                word("で", 79.3, 79.759),
+                word("吉", 79.76, 80.2),
+                word("本", 80.2, 80.24),
+                word("芸", 80.24, 80.58),
+                word("人", 80.58, 80.82),
+                word("を", 80.82, 80.94),
+                word("お", 80.94, 81.039),
+                word("見", 81.04, 81.24),
+                word("せ", 81.3, 81.34),
+                word("し", 81.34, 81.46),
+                word("ま", 81.46, 81.6),
+                word("す", 81.6, 81.72),
+                word("の", 81.72, 81.86),
+                word("で", 81.86, 82.14),
+                word("、", 82.14, 82.14),
+                word("そ", 82.2, 82.32),
+                word("れ", 82.32, 82.54),
+                word("が", 82.54, 82.9),
+                word("誰", 82.9, 83.16),
+                word("な", 83.16, 83.3),
+                word("の", 83.3, 83.48),
+                word("か", 83.48, 83.62),
+                word("わ", 83.62, 83.74),
+                word("か", 83.74, 83.9),
+                word("っ", 83.9, 84.02),
+                word("た", 84.02, 84.18),
+                word("ら", 84.18, 84.36),
+                word("早", 84.36, 84.5),
+                word("押", 84.5, 84.74),
+                word("し", 84.74, 84.92),
+                word("で", 84.92, 85.6),
+                word("お", 85.6, 85.74),
+                word("答", 85.74, 86.02),
+                word("え", 86.02, 86.08),
+                word("く", 86.08, 86.24),
+                word("だ", 86.24, 86.46),
+                word("さ", 86.46, 86.64),
+                word("い", 86.64, 87.1),
+                word("。", 87.1, 87.1),
+            ]
+        }
+
+        srt = convert_payload_to_srt(
+            payload,
+            SrtFormatOptions(max_segment_duration_s=4.0, max_lines_per_block=3),
+        )
+
+        self.assertIn("吉本芸人", srt)
+        self.assertIn("早押し", srt)
+        self.assertNotIn("吉本芸\n\n", srt)
+        self.assertNotIn("早\n\n", srt)
+
+    def test_zero_duration_limit_disables_duration_splitting(self):
+        payload = {
+            "words": [
+                word("一", 0.0, 1.0),
+                word("二", 1.0, 2.0),
+                word("三", 2.0, 3.0),
+                word("四", 3.0, 4.0),
+                word("五", 4.0, 5.0),
+                word("。", 5.0, 5.0),
+            ]
+        }
+
+        srt = convert_payload_to_srt(
+            payload,
+            SrtFormatOptions(
+                max_segment_duration_s=0.0,
+                max_segment_chars=20,
+                max_characters_per_line=20,
+            ),
+        )
+
+        self.assertIn("一二三四五。", srt)
+        self.assertNotIn("\n2\n", srt)
+
     def test_limits_close_three_speaker_turns_to_two_lines(self):
         payload = {
             "words": [
