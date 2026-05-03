@@ -7,7 +7,7 @@ of the video captioning workflow, from fetching metadata to translation.
 from project import Project, ProgressStage, VideoSource
 from loguru import logger
 from settings import settings
-from services.elevenlabs import ElevenLabsASR, SrtFormatOptions, convert_file
+from services.elevenlabs import ElevenLabsASR, convert_file
 from services.gemini import Gemini, GeminiTranslationError, TranslationRequest
 from services.media import MediaProcessor
 from services.ytdlp import (
@@ -190,18 +190,7 @@ def process_project(
         # Process SRT
         if not project.is_srt_completed:
             logger.info(f"Stage: Converting ASR JSON to SRT for {project_id}")
-            convert_file(
-                project.asr_path,
-                project.srt_path,
-                options=SrtFormatOptions(
-                    max_characters_per_line=settings.elevenlabs_srt_max_characters_per_line,
-                    max_segment_chars=settings.elevenlabs_srt_max_segment_chars,
-                    max_segment_duration_s=settings.elevenlabs_srt_max_segment_duration_s,
-                    segment_on_silence_longer_than_s=settings.elevenlabs_srt_segment_on_silence_longer_than_s,
-                    merge_speaker_turns_gap_s=settings.elevenlabs_srt_merge_speaker_turns_gap_s,
-                    max_lines_per_block=settings.elevenlabs_srt_max_lines_per_block,
-                ),
-            )
+            convert_file(project.asr_path, project.srt_path)
             project.mark_progress(ProgressStage.SRT_COMPLETED)
             logger.success("Stage complete: SRT generated")
         else:

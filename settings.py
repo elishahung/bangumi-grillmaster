@@ -22,33 +22,10 @@ class Settings(BaseSettings):
         default="jpn",
         description="Language code hint for ElevenLabs Speech to Text",
     )
-    elevenlabs_srt_max_characters_per_line: int = Field(
-        default=24,
-        description="Maximum characters per rendered source SRT line",
-    )
-    elevenlabs_srt_max_segment_chars: int = Field(
-        default=48,
-        description="Maximum text characters per source SRT subtitle block",
-    )
-    elevenlabs_srt_max_segment_duration_s: float = Field(
-        default=0.0,
-        description=(
-            "Maximum duration in seconds per source SRT subtitle block; "
-            "set to 0 to disable duration-based splitting"
-        ),
-    )
-    elevenlabs_srt_segment_on_silence_longer_than_s: float = Field(
-        default=0.5,
-        description="Split source SRT segments when silence exceeds this duration",
-    )
-    elevenlabs_srt_merge_speaker_turns_gap_s: float = Field(
-        default=0.1,
-        description="Merge adjacent speaker turns into one dialogue subtitle when the gap is below this duration",
-    )
-    elevenlabs_srt_max_lines_per_block: int = Field(
-        default=3,
-        description="Maximum rendered lines per source SRT subtitle block",
-    )
+
+    # Source SRT formatting parameters live as hard-coded constants at
+    # the top of services/elevenlabs/srt.py — they are fine-tuned by
+    # the maintainer, not exposed as configuration.
 
     # --- Translation: Gemini -----------------------------------------------
     gemini_api_key: str = Field(description="API key for Google Gemini service")

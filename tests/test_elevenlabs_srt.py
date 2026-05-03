@@ -3,7 +3,12 @@ import shutil
 import unittest
 from pathlib import Path
 
-from services.elevenlabs.srt import SrtFormatOptions, convert_file, convert_payload_to_srt
+from services.elevenlabs.srt import (
+    SrtFormatOptions,
+    _convert_payload_with_options,
+    convert_file,
+    convert_payload_to_srt,
+)
 
 
 def word(text, start, end, speaker="speaker_0"):
@@ -58,7 +63,12 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(payload)
+        # 0.25s gap between speakers — exceeds the production default
+        # of 0.1s. Pass an explicit threshold to focus this test on the
+        # merge-into-dialogue behavior rather than the threshold value.
+        srt = _convert_payload_with_options(
+            payload, SrtFormatOptions(merge_speaker_turns_gap_s=0.5)
+        )
 
         self.assertIn("-馬の頭企画とかよりいいでしょ。", srt)
         self.assertIn("-あれは嫌だもう。", srt)
@@ -88,7 +98,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(
+        srt = _convert_payload_with_options(
             payload,
             SrtFormatOptions(max_segment_chars=20, max_segment_duration_s=4.0),
         )
@@ -97,6 +107,9 @@ class ElevenLabsSrtTests(unittest.TestCase):
         self.assertNotIn("\nを。\n", srt)
 
     def test_merges_overlapping_blocks_from_zero_length_speaker_turns(self):
+        # The original block layout this test asserts depends on the
+        # 2-line cap. Pass it explicitly so the test exercises the
+        # overlap-merge behavior under that cap, regardless of default.
         payload = {
             "words": [
                 word("あ", 44.14, 44.2, "speaker_0"),
@@ -132,7 +145,9 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(payload)
+        srt = _convert_payload_with_options(
+            payload, SrtFormatOptions(max_lines_per_block=2)
+        )
 
         self.assertIn("1\n00:00:44,140 --> 00:00:44,530", srt)
         self.assertIn("-ありがとう。", srt)
@@ -151,7 +166,11 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(payload)
+        # The split between blocks 1/2 and 3/4 is driven by the 2-line
+        # cap. Pass it explicitly to keep this test pinned to that cap.
+        srt = _convert_payload_with_options(
+            payload, SrtFormatOptions(max_lines_per_block=2)
+        )
 
         self.assertIn("1\n00:00:00,000 --> 00:00:00,450\n-一。\n-二。", srt)
         self.assertIn("2\n00:00:00,450 --> 00:00:00,800\n三。", srt)
@@ -199,7 +218,9 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(payload)
+        srt = _convert_payload_with_options(
+            payload, SrtFormatOptions(max_lines_per_block=2)
+        )
 
         self.assertIn(
             "1\n00:00:22,720 --> 00:00:26,940\n"
@@ -331,7 +352,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(
+        srt = _convert_payload_with_options(
             payload, SrtFormatOptions(max_segment_duration_s=4.0)
         )
 
@@ -366,7 +387,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(
+        srt = _convert_payload_with_options(
             payload,
             SrtFormatOptions(
                 max_segment_duration_s=4.0,
@@ -444,7 +465,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(
+        srt = _convert_payload_with_options(
             payload,
             SrtFormatOptions(max_segment_duration_s=4.0, max_lines_per_block=3),
         )
@@ -466,7 +487,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(
+        srt = _convert_payload_with_options(
             payload,
             SrtFormatOptions(
                 max_segment_duration_s=0.0,
@@ -487,7 +508,16 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(payload)
+        # Speaker gaps here are 0.14s and 0.01s — wider than the
+        # production 0.1s threshold but typical for fast TV dialogue.
+        # Pin both the gap and the 2-line cap so the test exercises
+        # the line-cap logic on three close speaker turns.
+        srt = _convert_payload_with_options(
+            payload,
+            SrtFormatOptions(
+                merge_speaker_turns_gap_s=0.5, max_lines_per_block=2
+            ),
+        )
 
         self.assertIn("-一番流行ってるってスパイス。", srt)
         self.assertIn("-ニューヨークで流行ってるスパイス？", srt)
@@ -518,7 +548,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
             ]
         }
 
-        srt = convert_payload_to_srt(
+        srt = _convert_payload_with_options(
             payload,
             SrtFormatOptions(max_segment_chars=2, max_characters_per_line=2),
         )

@@ -47,32 +47,70 @@ JAPANESE_UNSAFE_SEGMENT_STARTS = {
 }
 
 
+# ---------------------------------------------------------------------
+# Source-SRT formatting parameters.
+#
+# These are intentionally hard-coded module constants rather than
+# user-tunable settings — they're fine-tuned over time against real
+# ASR output, not configuration knobs the pipeline user should touch.
+# Tests exercise alternative values via the private
+# `_convert_payload_with_options` entry point.
+# ---------------------------------------------------------------------
+
+MAX_CHARACTERS_PER_LINE = 24
+MAX_SEGMENT_CHARS = 48
+MAX_SEGMENT_DURATION_S = 0.0  # 0 disables duration-based splitting
+SEGMENT_ON_SILENCE_LONGER_THAN_S = 0.7
+MERGE_SPEAKER_TURNS_GAP_S = 0.45
+MERGE_SAME_SPEAKER_GAP_S = 0.25
+MERGE_OVERLAPPING_BLOCKS = True
+MAX_OVERLAPPING_BLOCK_DURATION_S = 8.0
+MAX_UTTERANCES_PER_BLOCK = 5
+MAX_LINES_PER_BLOCK = 2
+INLINE_SHORT_SAME_SPEAKER_UTTERANCES = True
+MAX_INLINE_SHORT_UTTERANCE_CHARS = 8
+MAX_ORPHAN_TAIL_CHARS = 8
+MIN_SEGMENT_DURATION_S = 0.35
+DIALOGUE_PREFIX = "-"
+INCLUDE_SPEAKER_PREFIX_FOR_DIALOGUE = True
+TEXT_JOIN_LANGUAGE = "ja"
+IGNORED_WORD_TYPES: frozenset[str] = frozenset({"audio_event"})
+
+
 @dataclass(frozen=True)
 class SrtFormatOptions:
-    """Formatting controls for local SRT generation."""
+    """Internal formatting controls.
 
-    max_characters_per_line: int = 24
-    max_segment_chars: int = 48
-    max_segment_duration_s: float = 0.0
-    segment_on_silence_longer_than_s: float = 0.7
-    merge_speaker_turns_gap_s: float = 0.45
-    merge_same_speaker_gap_s: float = 0.25
-    merge_overlapping_blocks: bool = True
-    max_overlapping_block_duration_s: float = 8.0
-    max_utterances_per_block: int = 5
-    max_lines_per_block: int = 2
-    inline_short_same_speaker_utterances: bool = True
-    max_inline_short_utterance_chars: int = 8
-    max_orphan_tail_chars: int = 8
-    min_segment_duration_s: float = 0.35
+    Defaults read from the module-level constants above so that the
+    private testing entry point can override individual fields without
+    drifting from production values."""
+
+    max_characters_per_line: int = MAX_CHARACTERS_PER_LINE
+    max_segment_chars: int = MAX_SEGMENT_CHARS
+    max_segment_duration_s: float = MAX_SEGMENT_DURATION_S
+    segment_on_silence_longer_than_s: float = SEGMENT_ON_SILENCE_LONGER_THAN_S
+    merge_speaker_turns_gap_s: float = MERGE_SPEAKER_TURNS_GAP_S
+    merge_same_speaker_gap_s: float = MERGE_SAME_SPEAKER_GAP_S
+    merge_overlapping_blocks: bool = MERGE_OVERLAPPING_BLOCKS
+    max_overlapping_block_duration_s: float = MAX_OVERLAPPING_BLOCK_DURATION_S
+    max_utterances_per_block: int = MAX_UTTERANCES_PER_BLOCK
+    max_lines_per_block: int = MAX_LINES_PER_BLOCK
+    inline_short_same_speaker_utterances: bool = (
+        INLINE_SHORT_SAME_SPEAKER_UTTERANCES
+    )
+    max_inline_short_utterance_chars: int = MAX_INLINE_SHORT_UTTERANCE_CHARS
+    max_orphan_tail_chars: int = MAX_ORPHAN_TAIL_CHARS
+    min_segment_duration_s: float = MIN_SEGMENT_DURATION_S
     split_on_punctuation: str = JAPANESE_HARD_PUNCTUATION
     soft_split_punctuation: str = JAPANESE_SOFT_PUNCTUATION
-    dialogue_prefix: str = "-"
+    dialogue_prefix: str = DIALOGUE_PREFIX
     line_separator: str = "\n"
-    include_speaker_prefix_for_dialogue: bool = True
-    text_join_language: str = "ja"
+    include_speaker_prefix_for_dialogue: bool = (
+        INCLUDE_SPEAKER_PREFIX_FOR_DIALOGUE
+    )
+    text_join_language: str = TEXT_JOIN_LANGUAGE
     ignored_word_types: set[str] = field(
-        default_factory=lambda: {"audio_event"}
+        default_factory=lambda: set(IGNORED_WORD_TYPES)
     )
 
 
@@ -102,24 +140,28 @@ class SubtitleBlock:
 def convert_file(
     input_path: str | Path,
     output_path: str | Path,
-    options: SrtFormatOptions | None = None,
 ) -> None:
-    """Convert an ElevenLabs ASR JSON file to SRT."""
+    """Convert an ElevenLabs ASR JSON file to SRT under fixed parameters."""
     input_path = Path(input_path)
     output_path = Path(output_path)
     payload = json.loads(input_path.read_text(encoding="utf-8"))
-    srt = convert_payload_to_srt(payload, options)
+    srt = convert_payload_to_srt(payload)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(srt, encoding="utf-8")
     logger.success(f"Converted ElevenLabs ASR JSON to SRT: {output_path}")
 
 
-def convert_payload_to_srt(
-    payload: dict[str, Any],
-    options: SrtFormatOptions | None = None,
+def convert_payload_to_srt(payload: dict[str, Any]) -> str:
+    """Convert an ElevenLabs ASR payload to SRT under fixed parameters."""
+    return _convert_payload_with_options(payload, SrtFormatOptions())
+
+
+def _convert_payload_with_options(
+    payload: dict[str, Any], options: SrtFormatOptions
 ) -> str:
-    """Convert an ElevenLabs ASR response payload to SRT text."""
-    options = options or SrtFormatOptions()
+    """Internal entry point that allows option overrides — for tests
+    and fine-tuning experiments only. Production code calls
+    `convert_payload_to_srt` / `convert_file`."""
     tokens = _extract_tokens(payload, options)
     if not tokens:
         raise ValueError("ElevenLabs ASR JSON does not contain timed words")
