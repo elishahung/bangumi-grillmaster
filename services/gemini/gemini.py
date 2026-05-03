@@ -18,6 +18,7 @@ from .errors import (
     PrePassError,
     TranslationCostSummary,
 )
+from .normalizer import normalize_translated_blocks
 from .pre_pass import run_pre_pass
 
 
@@ -226,6 +227,7 @@ class Gemini:
         all_blocks: list[SrtBlock] = []
         for r in chunk_results:
             all_blocks.extend(r.blocks)
+        all_blocks = normalize_translated_blocks(all_blocks)
         all_blocks = [
             SrtBlock(index=i, timecode=block.timecode, text=block.text)
             for i, block in enumerate(all_blocks, start=1)
