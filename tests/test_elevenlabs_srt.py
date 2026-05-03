@@ -592,6 +592,60 @@ class ElevenLabsSrtTests(unittest.TestCase):
         self.assertNotIn("見せますの\nで、", srt)
         self.assertNotIn("\nで、", srt)
 
+    def test_silence_does_not_orphan_short_hard_punct_tail(self):
+        # A number followed by silence and a counter+。 — without the
+        # orphan-tail check the silence would split off a standalone
+        # 「歳。」 block. With it, the whole "30歳。" stays as one
+        # utterance because the upcoming tail is short and ends with
+        # hard punctuation.
+        payload = {
+            "words": [
+                word("30", 0.0, 0.5, "speaker_0"),
+                word("歳。", 2.0, 2.5, "speaker_0"),  # 1.5s silence
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("30歳。", srt)
+        self.assertNotIn("\n歳。\n", srt.rstrip("\n") + "\n")
+
+    def test_silence_does_not_orphan_drawn_out_filler_before_short_tail(self):
+        # Speaker holds 'さ' for 1.4s, pauses 1s, then says 'あ赤ちゃん。'.
+        # The upcoming "あ赤ちゃん。" is a short hard-punct tail, so the
+        # silence-driven split is suppressed and the whole phrase becomes
+        # one utterance "さあ赤ちゃん。".
+        payload = {
+            "words": [
+                word("前", 0.0, 0.4, "speaker_0"),
+                word("の。", 0.4, 0.8, "speaker_0"),
+                word("さ", 4.0, 5.4, "speaker_0"),
+                word("あ", 6.4, 6.46, "speaker_0"),
+                word("赤ちゃん。", 6.46, 6.88, "speaker_0"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        self.assertIn("さあ赤ちゃん。", srt)
+        self.assertNotIn("\nさ\n", srt.rstrip("\n") + "\n")
+
+    def test_silence_split_still_fires_when_upcoming_tail_is_long(self):
+        # A different-speaker boundary still splits, even if the next
+        # speaker's first utterance is short.
+        payload = {
+            "words": [
+                word("どうぞ。", 0.0, 0.5, "speaker_0"),
+                word("さ", 1.0, 2.4, "speaker_1"),
+                word("はい。", 4.0, 4.5, "speaker_2"),
+            ]
+        }
+
+        srt = convert_payload_to_srt(payload)
+
+        # speaker_1's standalone 'さ' stays in its own block.
+        self.assertIn("\nさ\n", srt.rstrip("\n") + "\n")
+
     def test_wrap_does_not_split_alphanumeric_run(self):
         # A run of digits near the natural midpoint must stay intact.
         text = "短い前置きですが12345という数字を含む長い文章である"

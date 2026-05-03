@@ -220,7 +220,9 @@ def _build_utterances(
         if split_index is not None:
             utterances.append(_tokens_to_utterance(current[:split_index], options))
             current = [*current[split_index:], token]
-        elif _should_start_new_utterance(current, current[-1], token, options):
+        elif _should_start_new_utterance(
+            current, current[-1], token, tokens, index, options
+        ):
             utterances.append(_tokens_to_utterance(current, options))
             current = [token]
         else:
@@ -236,6 +238,8 @@ def _should_start_new_utterance(
     current: list[WordToken],
     previous: WordToken,
     token: WordToken,
+    tokens: list[WordToken],
+    token_index: int,
     options: SrtFormatOptions,
 ) -> bool:
     if token.speaker_id != previous.speaker_id:
@@ -245,6 +249,7 @@ def _should_start_new_utterance(
         token.start - previous.end > options.segment_on_silence_longer_than_s
         and not unsafe_start
         and not _is_short_soft_fragment(current, options)
+        and not _would_create_short_orphan_tail(tokens, token_index, options)
     ):
         return True
 
@@ -322,11 +327,15 @@ def _would_create_short_orphan_tail(
 
     speaker_id = tokens[start_index].speaker_id
     tail: list[WordToken] = []
+    raw_len = 0
     for index in range(start_index, len(tokens)):
         token = tokens[index]
         if token.speaker_id != speaker_id:
             break
         tail.append(token)
+        raw_len += len(token.text)
+        if raw_len > options.max_orphan_tail_chars:
+            return False
         if _ends_with_split_punctuation(token.text, options):
             break
 
