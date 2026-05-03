@@ -46,6 +46,20 @@ def process(
             show_default=False,
         ),
     ] = None,
+    parent_project: Annotated[
+        str | None,
+        typer.Option(
+            "--parent-project",
+            help=(
+                "Path to a parent project directory whose pre_pass.json "
+                "should seed this project's pre-pass for cross-episode "
+                "consistency (e.g., 'projects/BV1ZArvBaEqL' or an archived "
+                "path). Accepts a directory path, not an ID, since the "
+                "parent project may already be archived."
+            ),
+            show_default=False,
+        ),
+    ] = None,
 ) -> None:
     """Submit and process a online video for captioning and translation.
 
@@ -67,7 +81,8 @@ def process(
     """
     logger.info(
         f"CLI invoked with source_str={source_str}, "
-        f"translation_hint={translation_hint}, break_after={break_after}"
+        f"translation_hint={translation_hint}, break_after={break_after}, "
+        f"parent_project={parent_project}"
     )
 
     try:
@@ -75,6 +90,7 @@ def process(
             source_str=source_str,
             translation_hint=translation_hint,
             break_after=break_after,
+            parent_project_path=parent_project,
         )
         logger.success(f"Successfully completed processing for {source_str}")
     except Exception as e:

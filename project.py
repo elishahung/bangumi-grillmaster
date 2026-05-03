@@ -92,6 +92,7 @@ class Project(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     name: str = Field(default="video")
     translation_hint: str | None = None
+    parent_project_path: Path | None = None
     source_metadata: SourceMetadata = Field(default_factory=SourceMetadata)
     total_cost: float = 0.0
     service_costs: dict[str, float] = Field(default_factory=dict)
@@ -154,12 +155,21 @@ class Project(BaseModel):
 
     @classmethod
     def from_source_str(
-        cls, source_str: str, translation_hint: str | None = None
+        cls,
+        source_str: str,
+        translation_hint: str | None = None,
+        parent_project_path: str | Path | None = None,
     ) -> "Project":
         """Load an existing project from disk or create a new one.
 
         Args:
             source_str: The video source, id or url (e.g., 'BV1ZArvBaEqL', 'https://www.bilibili.com/video/BV1ZArvBaEqL').
+            translation_hint: Optional translation hint for new projects.
+            parent_project_path: Optional filesystem path to a parent project
+                directory whose pre_pass.json will seed this project's pre-pass
+                for cross-episode consistency. Accepts paths under `projects/`
+                or anywhere else (e.g., archived locations) since the parent
+                may have been archived.
 
         Returns:
             A Project instance loaded from the saved JSON file, or a new
@@ -170,13 +180,20 @@ class Project(BaseModel):
             JSONDecodeError: If the project file is corrupted.
         """
         id = cls.parse_source_str(source_str)
+        resolved_parent_path = (
+            Path(parent_project_path) if parent_project_path is not None else None
+        )
 
         logger.debug(f"Loading project: {id}")
         json_path = Path(PROJECT_ROOT_NAME) / id / PROJECT_FILE_NAME
 
         if not json_path.exists():
             logger.info(f"Creating new project: {id}")
-            return cls(id=id, translation_hint=translation_hint)
+            return cls(
+                id=id,
+                translation_hint=translation_hint,
+                parent_project_path=resolved_parent_path,
+            )
 
         try:
             with open(json_path, "r", encoding="utf-8") as f:
@@ -187,6 +204,10 @@ class Project(BaseModel):
             if translation_hint is not None:
                 logger.warning(
                     f"Translation hint is not supported for existing projects"
+                )
+            if resolved_parent_path is not None:
+                logger.warning(
+                    f"Parent project is not supported for existing projects"
                 )
 
             return project
@@ -460,6 +481,43 @@ class Project(BaseModel):
             Path to .pre_pass/pre_pass.json.
         """
         return self.pre_pass_cache_dir / PRE_PASS_FILE_NAME
+
+    @property
+    def parent_pre_pass_path(self) -> Path | None:
+        """Resolve the parent project's pre_pass.json path, if configured.
+
+        Returns:
+            Path to `<parent_project_path>/.pre_pass/pre_pass.json`, or None if
+            no parent project is set.
+        """
+        if self.parent_project_path is None:
+            return None
+        return (
+            self.parent_project_path / PRE_PASS_CACHE_DIR_NAME / PRE_PASS_FILE_NAME
+        )
+
+    def parent_pre_pass_context(self) -> str | None:
+        """Read the parent project's pre_pass.json content for prompt injection.
+
+        Returns:
+            Raw JSON text of the parent's pre_pass.json, or None if no parent
+            project is configured.
+
+        Raises:
+            FileNotFoundError: If a parent project is configured but its
+                pre_pass.json does not exist on disk. Surfaced early so the
+                pipeline fails before incurring any Gemini cost.
+        """
+        path = self.parent_pre_pass_path
+        if path is None:
+            return None
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Parent project pre_pass.json not found: {path}. "
+                "Ensure the parent project has completed its pre-pass stage, "
+                "or check the --parent-project path."
+            )
+        return path.read_text(encoding="utf-8")
 
     @property
     def asr_cache_dir(self) -> Path:

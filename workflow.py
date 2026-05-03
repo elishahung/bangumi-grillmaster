@@ -22,6 +22,7 @@ def submit_project(
     source_str: str,
     translation_hint: str | None = None,
     break_after: ProgressStage | None = None,
+    parent_project_path: str | None = None,
 ) -> None:
     """Submit a new video project for processing.
 
@@ -34,6 +35,9 @@ def submit_project(
         translation_hint: Optional description of the video content. If not provided,
             the video's title will be used as description during metadata fetching.
         break_after: Optional progress stage to stop after.
+        parent_project_path: Optional filesystem path to a parent project
+            directory whose pre_pass.json should seed this project's pre-pass
+            for cross-episode consistency.
 
     Note:
         The project will be automatically saved to the projects directory before
@@ -41,7 +45,9 @@ def submit_project(
     """
     logger.info(f"Submitting new project: {source_str}")
     new_project = Project.from_source_str(
-        source_str=source_str, translation_hint=translation_hint
+        source_str=source_str,
+        translation_hint=translation_hint,
+        parent_project_path=parent_project_path,
     )
     new_project.save()
     logger.info(f"Project saved: {source_str}")
@@ -222,6 +228,7 @@ def process_project(
                         pre_pass_cache_dir=project.pre_pass_cache_dir,
                         chunks_cache_dir=project.chunks_cache_dir,
                         source_metadata_context=project.source_metadata_context(),
+                        parent_pre_pass_context=project.parent_pre_pass_context(),
                     )
                 )
             except GeminiTranslationError as e:

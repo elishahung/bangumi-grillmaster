@@ -39,6 +39,7 @@ class TranslationRequest(BaseModel):
     pre_pass_cache_dir: Path
     chunks_cache_dir: Path
     source_metadata_context: str | None = None
+    parent_pre_pass_context: str | None = None
 
 
 class Gemini:
@@ -123,6 +124,7 @@ class Gemini:
                 request.pre_pass_path,
                 request.pre_pass_cache_dir,
                 request.source_metadata_context,
+                request.parent_pre_pass_context,
             )
         except PrePassError as e:
             summary = build_summary(

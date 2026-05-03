@@ -1,5 +1,42 @@
 """System instructions for pre-pass analysis and per-chunk translation."""
 
+OFFICIAL_SOURCE_METADATA_INSTRUCTION = """### OFFICIAL SOURCE METADATA
+The user message includes official source metadata such as cast/talent names
+from the distribution platform.
+
+When official source cast/talent metadata is present:
+- `characters` MUST include every listed cast/talent entry.
+- Preserve each official source name exactly as written in `name_jp`; do not
+  normalize spacing, convert script, rewrite kanji/kana, or replace it with an
+  ASR spelling.
+- Use the official source names as authoritative anchors for identifying
+  recurring people and correcting ASR name errors.
+- If audio, images, or ASR appear to conflict with the official source spelling,
+  keep the official source spelling in `characters.name_jp` and put aliases or
+  ASR corrections in `proper_nouns`.
+"""
+
+
+PARENT_PRE_PASS_INSTRUCTION = """### PARENT-PROJECT PRE-PASS REFERENCE
+The user message includes a Pre-Pass JSON briefing produced for the **previous
+episode** of this same program. Treat it as authoritative for cross-episode
+consistency:
+
+- `characters.name_zh`, `proper_nouns`, `glossary`, and `catchphrases.phrase_zh`
+  values from the parent pre-pass MUST be reused verbatim for any entity that
+  also appears (or is referenced) in this episode. Do NOT relocalize a name or
+  term that the parent has already fixed.
+- You MAY add new entries that only appear in this episode. You MAY refine a
+  parent entry only if the current audio/images clearly contradict it (e.g.
+  parent had an ASR-error name); in that case prefer the corrected form and
+  also include the parent spelling as an alias in `proper_nouns`.
+- `tone_notes` and `summary` should be written for THIS episode, but stay
+  stylistically continuous with the parent (same register, same address habits)
+  unless the audio shows the show has shifted.
+- `segment_summaries` are episode-local — do not copy from the parent.
+"""
+
+
 pre_pass_instruction = """You are an expert analyst preparing context for a downstream translator of **Japanese Variety Shows and Owarai (Comedy)** subtitles. The downstream translator will localize the SRT into **Traditional Chinese (Taiwan)** in parallel chunks. Your job is to produce a single JSON briefing that ensures consistency across those chunks.
 
 ### YOUR ROLE
