@@ -43,11 +43,12 @@ class GeminiAssetsTests(unittest.TestCase):
                 cache_root=root / "pre_pass",
                 interval_seconds=120,
                 max_side=768,
+                intro_skip_seconds=3.0,
             )
 
         self.assertEqual(
             [frame.timestamp_seconds for frame in assets.frames],
-            [0.0, 120.0, 240.0, 304.9],
+            [3.0, 120.0, 240.0, 304.9],
         )
         self.assertEqual(extract_frame.call_count, 4)
         self.assertEqual(assets.audio.path, audio_path)
@@ -96,6 +97,7 @@ class GeminiAssetsTests(unittest.TestCase):
                 total_chunks=2,
                 interval_seconds=60,
                 max_side=768,
+                intro_skip_seconds=3.0,
             )
 
         self.assertEqual(
@@ -109,6 +111,100 @@ class GeminiAssetsTests(unittest.TestCase):
         self.assertEqual(manifest["max_side"], 768)
         self.assertEqual(manifest["audio"]["path"], str(assets.audio.path))
         self.assertEqual(manifest["frames"][0]["mime_type"], "image/jpeg")
+
+    def test_first_chunk_skips_intro_logo_for_frames(self):
+        chunk = [
+            SrtBlock(
+                index=1,
+                timecode="00:00:00,500 --> 00:00:02,000",
+                text="a",
+            ),
+            SrtBlock(
+                index=2,
+                timecode="00:01:59,000 --> 00:02:00,000",
+                text="b",
+            ),
+        ]
+
+        root = self._make_temp_dir()
+        video_path = root / "video.mp4"
+        audio_path = root / "audio.opus"
+
+        with (
+            patch(
+                "services.gemini.assets.MediaProcessor.extract_audio_segment"
+            ) as extract_audio,
+            patch(
+                "services.gemini.assets.MediaProcessor.extract_video_frame"
+            ),
+        ):
+            assets = prepare_chunk_media_assets(
+                video_path=video_path,
+                audio_path=audio_path,
+                cache_root=root / "chunks",
+                video_key="video-key",
+                chunk=chunk,
+                chunk_index=0,
+                total_chunks=3,
+                interval_seconds=60,
+                max_side=768,
+                intro_skip_seconds=3.0,
+            )
+
+        # First chunk: first frame pushed past intro logo, but interval lattice
+        # and end frame stay anchored to the subtitle range.
+        self.assertEqual(
+            [frame.timestamp_seconds for frame in assets.frames],
+            [3.0, 60.0, 120.0],
+        )
+        # Audio segment must NOT be shifted by intro_skip.
+        self.assertEqual(
+            extract_audio.call_args.kwargs["start_seconds"], 0.5
+        )
+
+    def test_non_first_chunk_does_not_apply_intro_skip(self):
+        chunk = [
+            SrtBlock(
+                index=10,
+                timecode="00:00:01,000 --> 00:00:02,000",
+                text="a",
+            ),
+            SrtBlock(
+                index=11,
+                timecode="00:01:00,000 --> 00:01:01,000",
+                text="b",
+            ),
+        ]
+
+        root = self._make_temp_dir()
+        video_path = root / "video.mp4"
+        audio_path = root / "audio.opus"
+
+        with (
+            patch(
+                "services.gemini.assets.MediaProcessor.extract_audio_segment"
+            ),
+            patch(
+                "services.gemini.assets.MediaProcessor.extract_video_frame"
+            ),
+        ):
+            assets = prepare_chunk_media_assets(
+                video_path=video_path,
+                audio_path=audio_path,
+                cache_root=root / "chunks",
+                video_key="video-key",
+                chunk=chunk,
+                chunk_index=2,
+                total_chunks=3,
+                interval_seconds=30,
+                max_side=768,
+                intro_skip_seconds=3.0,
+            )
+
+        self.assertEqual(
+            [frame.timestamp_seconds for frame in assets.frames],
+            [1.0, 30.0, 60.0, 61.0],
+        )
 
     def test_media_ref_to_part_reads_bytes_and_mime_type(self):
         root = self._make_temp_dir()

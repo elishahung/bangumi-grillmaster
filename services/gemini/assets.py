@@ -54,6 +54,7 @@ def prepare_pre_pass_media_assets(
     cache_root: Path,
     interval_seconds: int,
     max_side: int,
+    intro_skip_seconds: float,
 ) -> PrePassMediaAssets:
     cache_root.mkdir(parents=True, exist_ok=True)
     frame_dir = cache_root / "media" / "frames"
@@ -65,8 +66,11 @@ def prepare_pre_pass_media_assets(
     # there is no frame at the end-of-stream timestamp.
     last_frame_offset = 0.1
     end_seconds = max(0.0, duration - last_frame_offset)
+    # Skip the very first seconds (TV station intro/logo). Clamp so the start
+    # never exceeds end on pathologically short videos.
+    start_seconds = min(max(0.0, intro_skip_seconds), end_seconds)
     timestamps = MediaProcessor.absolute_interval_timestamps(
-        start_seconds=0.0,
+        start_seconds=start_seconds,
         end_seconds=end_seconds,
         interval_seconds=interval_seconds,
         include_start=True,
@@ -89,6 +93,7 @@ def prepare_pre_pass_media_assets(
                 "audio": audio_ref.model_dump(mode="json"),
                 "duration_seconds": duration,
                 "interval_seconds": interval_seconds,
+                "intro_skip_seconds": intro_skip_seconds,
                 "max_side": max_side,
                 "frames": [
                     {
@@ -119,6 +124,7 @@ def prepare_chunk_media_assets(
     total_chunks: int,
     interval_seconds: int,
     max_side: int,
+    intro_skip_seconds: float,
 ) -> ChunkMediaAssets:
     range_info = _chunk_time_range(chunk)
     chunk_slug = f"{chunk[0].index:04d}-{chunk[-1].index:04d}"
@@ -129,8 +135,15 @@ def prepare_chunk_media_assets(
     response_dir = cache_root / "responses"
     manifest_path = manifests_dir / f"chunk_{chunk_slug}.json"
 
+    # Push the first chunk's first frame past the TV station intro/logo.
+    # Audio segment + chunk time_range stay anchored to the subtitle range.
+    frame_start = range_info.start_seconds
+    if chunk_index == 0:
+        frame_start = min(
+            max(frame_start, intro_skip_seconds), range_info.end_seconds
+        )
     frame_timestamps = MediaProcessor.absolute_interval_timestamps(
-        start_seconds=range_info.start_seconds,
+        start_seconds=frame_start,
         end_seconds=range_info.end_seconds,
         interval_seconds=interval_seconds,
         include_start=True,
@@ -173,6 +186,9 @@ def prepare_chunk_media_assets(
                 "to_index": chunk[-1].index,
                 "time_range": range_info.model_dump(),
                 "interval_seconds": interval_seconds,
+                "intro_skip_seconds": intro_skip_seconds
+                if chunk_index == 0
+                else None,
                 "max_side": max_side,
                 "audio": audio_ref.model_dump(mode="json"),
                 "frames": [frame.model_dump(mode="json") for frame in frames],

@@ -106,6 +106,7 @@ async def run_pre_pass(
         cache_root=pre_pass_cache_dir,
         interval_seconds=settings.gemini_pre_pass_frame_interval_seconds,
         max_side=settings.gemini_pre_pass_frame_max_side,
+        intro_skip_seconds=settings.gemini_intro_skip_seconds,
     )
     frame_timestamps = [
         frame.timestamp_seconds for frame in pre_pass_assets.frames
@@ -130,6 +131,7 @@ async def run_pre_pass(
             + user_message
             + str(settings.gemini_pre_pass_frame_interval_seconds)
             + str(settings.gemini_pre_pass_frame_max_side)
+            + str(settings.gemini_intro_skip_seconds)
         ).encode("utf-8")
     ).hexdigest()
     manifest_path = pre_pass_cache_dir / "manifest.json"

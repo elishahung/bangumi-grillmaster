@@ -89,6 +89,10 @@ class Settings(BaseSettings):
         default=2,
         description="Maximum number of unmatched/missing subtitle blocks allowed per translated chunk before structural validation fails",
     )
+    gemini_intro_skip_seconds: float = Field(
+        default=3.0,
+        description="Skip the first N seconds of video when sampling reference frames (avoids TV station intro/logo frames). Applies to pre-pass and the first chunk only.",
+    )
 
     # --- Translation: structural fix (DeepSeek, non-Gemini) ------------------
     deepseek_api_key: str = Field(
