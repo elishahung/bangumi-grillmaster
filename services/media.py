@@ -181,11 +181,21 @@ class MediaProcessor:
                     ar="16000",
                     audio_bitrate="24k",
                 )
-                .run(overwrite_output=True, quiet=True)
+                .run(
+                    overwrite_output=True,
+                    capture_stdout=True,
+                    capture_stderr=True,
+                )
             )
             return output_file
-        except Exception as e:
-            logger.error(f"Failed to extract audio segment: {e}")
+        except ffmpeg.Error as e:
+            stderr = (
+                e.stderr.decode("utf-8", errors="replace") if e.stderr else ""
+            )
+            logger.error(
+                f"Failed to extract audio segment "
+                f"{start_seconds:.3f}-{end_seconds:.3f}s: {stderr}"
+            )
             raise
 
     @staticmethod
@@ -221,11 +231,20 @@ class MediaProcessor:
                     vcodec="mjpeg",
                     qscale=2,
                 )
-                .run(overwrite_output=True, quiet=True)
+                .run(
+                    overwrite_output=True,
+                    capture_stdout=True,
+                    capture_stderr=True,
+                )
             )
             return output_file
-        except Exception as e:
-            logger.error(f"Failed to extract frame: {e}")
+        except ffmpeg.Error as e:
+            stderr = (
+                e.stderr.decode("utf-8", errors="replace") if e.stderr else ""
+            )
+            logger.error(
+                f"Failed to extract frame at {timestamp_seconds:.3f}s: {stderr}"
+            )
             raise
 
     @staticmethod

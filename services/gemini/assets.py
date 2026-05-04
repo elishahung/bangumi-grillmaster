@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from google import genai
+from loguru import logger
 from pydantic import BaseModel
 
 from services.media import MediaProcessor, TimeRange
@@ -61,10 +62,11 @@ def prepare_pre_pass_media_assets(
     manifest_path = cache_root / "assets.json"
 
     duration = MediaProcessor.get_media_duration(video_path)
-    # Back the boundary off by a small offset so ffmpeg can seek to a real
-    # decoded frame; seeking to exactly `duration` typically fails because
-    # there is no frame at the end-of-stream timestamp.
-    last_frame_offset = 0.1
+    # Fast-seek (-ss before -i in extract_video_frame) lands on the prior
+    # keyframe; vframes=1 then needs at least one decodable frame ahead. Stay
+    # clear of the trailing GOP (typically 0.5-1.0s in TV mux) so the seek
+    # never lands on the last keyframe with no decodable frame after it.
+    last_frame_offset = 1.5
     end_seconds = max(0.0, duration - last_frame_offset)
     # Skip the very first seconds (TV station intro/logo). Clamp so the start
     # never exceeds end on pathologically short videos.
@@ -77,13 +79,17 @@ def prepare_pre_pass_media_assets(
         include_end=True,
     )
     frames = [
-        _build_frame_asset(
-            video_path=video_path,
-            output_dir=frame_dir,
-            timestamp_seconds=timestamp,
-            max_side=max_side,
+        frame
+        for frame in (
+            _build_frame_asset(
+                video_path=video_path,
+                output_dir=frame_dir,
+                timestamp_seconds=timestamp,
+                max_side=max_side,
+            )
+            for timestamp in timestamps
         )
-        for timestamp in timestamps
+        if frame is not None
     ]
     audio_ref = LocalMediaRef(path=audio_path, mime_type="audio/ogg")
     manifest_path.write_text(
@@ -166,13 +172,17 @@ def prepare_chunk_media_assets(
 
     audio_ref = LocalMediaRef(path=audio_output, mime_type="audio/ogg")
     frames = [
-        _build_frame_asset(
-            video_path=video_path,
-            output_dir=frame_dir,
-            timestamp_seconds=timestamp,
-            max_side=max_side,
+        frame
+        for frame in (
+            _build_frame_asset(
+                video_path=video_path,
+                output_dir=frame_dir,
+                timestamp_seconds=timestamp,
+                max_side=max_side,
+            )
+            for timestamp in frame_timestamps
         )
-        for timestamp in frame_timestamps
+        if frame is not None
     ]
 
     manifests_dir.mkdir(parents=True, exist_ok=True)
@@ -218,16 +228,22 @@ def _build_frame_asset(
     output_dir: Path,
     timestamp_seconds: float,
     max_side: int,
-) -> FrameSpec:
+) -> FrameSpec | None:
     output_dir.mkdir(parents=True, exist_ok=True)
     filename = f"frame_{timestamp_seconds:010.3f}_{max_side}.jpg"
     output_path = output_dir / filename
-    MediaProcessor.extract_video_frame(
-        input_file=video_path,
-        output_file=output_path,
-        timestamp_seconds=timestamp_seconds,
-        max_side=max_side,
-    )
+    try:
+        MediaProcessor.extract_video_frame(
+            input_file=video_path,
+            output_file=output_path,
+            timestamp_seconds=timestamp_seconds,
+            max_side=max_side,
+        )
+    except Exception as e:
+        logger.warning(
+            f"Skipping frame at {timestamp_seconds:.3f}s: {e}"
+        )
+        return None
     return FrameSpec(
         timestamp_seconds=timestamp_seconds,
         path=output_path,
