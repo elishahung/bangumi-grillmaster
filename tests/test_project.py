@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import project as project_module
-from project import Project
+from project import Project, VideoSource
 from services.ytdlp.info import SourceTalentInfo
 
 
@@ -100,6 +100,83 @@ class ProjectTests(unittest.TestCase):
         )
         self.assertIn("濱家　隆一 / ハマイエ　リュウイチ", context)
         self.assertIn("お笑い芸人", context)
+
+
+class SourceParsingTests(unittest.TestCase):
+    def test_parse_youtube_watch_url(self):
+        self.assertEqual(
+            Project.parse_source_str(
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            ),
+            "v=dQw4w9WgXcQ",
+        )
+
+    def test_parse_youtube_watch_url_with_extra_params(self):
+        self.assertEqual(
+            Project.parse_source_str(
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s&list=ABC"
+            ),
+            "v=dQw4w9WgXcQ",
+        )
+
+    def test_parse_youtube_short_url(self):
+        self.assertEqual(
+            Project.parse_source_str("https://youtu.be/dQw4w9WgXcQ"),
+            "v=dQw4w9WgXcQ",
+        )
+
+    def test_parse_youtube_shorts_url(self):
+        self.assertEqual(
+            Project.parse_source_str(
+                "https://www.youtube.com/shorts/abc123XYZ_-"
+            ),
+            "v=abc123XYZ_-",
+        )
+
+    def test_parse_youtube_live_url(self):
+        self.assertEqual(
+            Project.parse_source_str(
+                "https://www.youtube.com/live/abc123XYZ_-"
+            ),
+            "v=abc123XYZ_-",
+        )
+
+    def test_parse_youtube_mobile_url(self):
+        self.assertEqual(
+            Project.parse_source_str(
+                "https://m.youtube.com/watch?v=dQw4w9WgXcQ"
+            ),
+            "v=dQw4w9WgXcQ",
+        )
+
+    def test_parse_youtube_v_prefix_passthrough(self):
+        # An already-stored ID must round-trip unchanged.
+        self.assertEqual(
+            Project.parse_source_str("v=dQw4w9WgXcQ"),
+            "v=dQw4w9WgXcQ",
+        )
+
+    def test_youtube_source_detection(self):
+        self.assertEqual(
+            Project(id="v=dQw4w9WgXcQ").source, VideoSource.YOUTUBE
+        )
+
+    def test_youtube_source_url(self):
+        self.assertEqual(
+            Project(id="v=dQw4w9WgXcQ").source_url,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        )
+
+    def test_existing_sources_not_regressed(self):
+        self.assertEqual(
+            Project(id="BV1ZArvBaEqL").source, VideoSource.BILIBILI
+        )
+        self.assertEqual(
+            Project(id="epknhe0jz5").source, VideoSource.TVER
+        )
+        self.assertEqual(
+            Project(id="90-979_s1_p360").source, VideoSource.ABEMA
+        )
 
 
 if __name__ == "__main__":

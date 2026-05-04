@@ -14,7 +14,7 @@ from enum import Enum
 from loguru import logger
 from settings import settings
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from services.ytdlp.info import SourceTalentInfo, YtDlpVideoInfo
 
 PROJECT_ROOT_NAME = "projects"
@@ -52,6 +52,7 @@ class VideoSource(str, Enum):
     BILIBILI = "bilibili"
     TVER = "tver"
     ABEMA = "abema"
+    YOUTUBE = "youtube"
 
 
 class SourceTalent(BaseModel):
@@ -111,7 +112,8 @@ class Project(BaseModel):
         """Parse a video source string to extract the video ID.
 
         Handles various input formats including direct IDs and full URLs.
-        Supports: Bilibili (URL/BV), TVer (URL/ID), Abema (URL/ID).
+        Supports: Bilibili (URL/BV), TVer (URL/ID), Abema (URL/ID),
+        YouTube (URL or `v=<id>` prefixed form).
 
         Args:
             source_str: Video source as ID or URL.
@@ -127,7 +129,24 @@ class Project(BaseModel):
         if bv_match:
             return bv_match.group(1)
 
-        # 2. Handle URLs (Bilibili & TVer & Abema)
+        # 2. Handle YouTube: already-prefixed `v=<id>` passes through unchanged
+        # so re-parsing a stored ID is idempotent.
+        if source_str.startswith("v="):
+            return source_str
+
+        # 3. Handle YouTube URLs: youtube.com/watch?v=ID, youtu.be/ID,
+        # youtube.com/shorts/ID, youtube.com/live/ID, m.youtube.com/...
+        if "youtube.com" in source_str or "youtu.be" in source_str:
+            parsed = urlparse(source_str)
+            qs = parse_qs(parsed.query)
+            if "v" in qs and qs["v"]:
+                return f"v={qs['v'][0]}"
+            parts = parsed.path.strip("/").split("/")
+            if parts and parts[-1]:
+                return f"v={parts[-1]}"
+            raise ValueError(f"Invalid YouTube URL: {source_str}")
+
+        # 4. Handle URLs (Bilibili & TVer & Abema)
         # Using urlparse is safer for handling query parameters
         if (
             "bilibili.com" in source_str
@@ -145,12 +164,12 @@ class Project(BaseModel):
             except Exception:
                 pass  # Fall through to error if parsing fails
 
-        # 3. Reject unknown URLs
+        # 5. Reject unknown URLs
         # If it looks like a URL but wasn't caught above, it's invalid/unsupported
         if source_str.startswith(("https://", "http://")):
             raise ValueError(f"Invalid video source: {source_str}")
 
-        # 4. Return as Direct ID
+        # 6. Return as Direct ID
         return source_str
 
     @classmethod
@@ -368,6 +387,11 @@ class Project(BaseModel):
         if self.id.startswith("BV"):
             return VideoSource.BILIBILI
 
+        # YouTube: stored with the `v=` prefix to disambiguate from the Abema
+        # fallback (their character sets overlap).
+        if self.id.startswith("v="):
+            return VideoSource.YOUTUBE
+
         # TVer: IDs typically start with 'ep' (episode) or 'sh' (series)
         # and contain ONLY alphanumeric characters (no hyphens/underscores).
         if self.id.startswith(("ep", "sh")) and self.id.isalnum():
@@ -392,6 +416,9 @@ class Project(BaseModel):
 
         if self.source == VideoSource.ABEMA:
             return f"https://abema.tv/video/episode/{self.id}"
+
+        if self.source == VideoSource.YOUTUBE:
+            return f"https://www.youtube.com/watch?v={self.id[2:]}"
 
         raise ValueError(f"Invalid video source: {self.source}")
 
