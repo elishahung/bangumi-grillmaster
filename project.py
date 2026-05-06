@@ -200,7 +200,9 @@ class Project(BaseModel):
         """
         id = cls.parse_source_str(source_str)
         resolved_parent_path = (
-            Path(parent_project_path) if parent_project_path is not None else None
+            Path(parent_project_path)
+            if parent_project_path is not None
+            else None
         )
 
         logger.debug(f"Loading project: {id}")
@@ -351,7 +353,7 @@ class Project(BaseModel):
             return
 
         archived_root = settings.archived_path
-        archived_path = archived_root / self.name
+        archived_path = archived_root / f"{self.id}_{self.name}"
 
         if not self.project_path.exists():
             logger.error(
@@ -520,7 +522,9 @@ class Project(BaseModel):
         if self.parent_project_path is None:
             return None
         return (
-            self.parent_project_path / PRE_PASS_CACHE_DIR_NAME / PRE_PASS_FILE_NAME
+            self.parent_project_path
+            / PRE_PASS_CACHE_DIR_NAME
+            / PRE_PASS_FILE_NAME
         )
 
     def parent_pre_pass_context(self) -> str | None:
