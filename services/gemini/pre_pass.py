@@ -152,6 +152,9 @@ async def run_pre_pass(
         except Exception as e:
             logger.warning(f"[pre-pass] Manifest read failed: {e}")
 
+    if parent_pre_pass_context:
+        logger.info(f"[pre-pass] Parent pre-pass context injected")
+
     config = genai.types.GenerateContentConfig(
         system_instruction=system_instruction,
         response_mime_type="application/json",
@@ -221,9 +224,7 @@ async def run_pre_pass(
                             frame.model_dump(mode="json")
                             for frame in pre_pass_assets.frames
                         ],
-                        "audio": pre_pass_assets.audio.model_dump(
-                            mode="json"
-                        ),
+                        "audio": pre_pass_assets.audio.model_dump(mode="json"),
                         "asset_manifest_path": str(
                             pre_pass_assets.manifest_path
                         ),

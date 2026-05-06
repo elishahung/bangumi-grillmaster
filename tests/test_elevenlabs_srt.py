@@ -47,8 +47,8 @@ class ElevenLabsSrtTests(unittest.TestCase):
 
         self.assertIn("これはテストです。", srt)
         self.assertIn("次です？", srt)
-        self.assertIn("00:00:00,000 --> 00:00:01,000", srt)
-        self.assertIn("00:00:01,100 --> 00:00:01,600", srt)
+        self.assertIn("00:00:00,000 --> 00:00:01,020", srt)
+        self.assertIn("00:00:01,100 --> 00:00:02,100", srt)
 
     def test_merges_close_speaker_turns_as_dialogue_without_speaker_ids(self):
         payload = {
@@ -175,7 +175,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
         self.assertIn("1\n00:00:00,000 --> 00:00:00,450\n-一。\n-二。", srt)
         self.assertIn("2\n00:00:00,450 --> 00:00:00,800\n三。", srt)
         self.assertIn("3\n00:00:00,800 --> 00:00:01,150\n-四。\n-五。", srt)
-        self.assertIn("4\n00:00:01,150 --> 00:00:01,500\n六。", srt)
+        self.assertIn("4\n00:00:01,150 --> 00:00:02,000\n六。", srt)
 
     def test_inlines_short_repeated_same_speaker_utterances(self):
         payload = {
@@ -191,7 +191,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
 
         srt = convert_payload_to_srt(payload)
 
-        self.assertIn("1\n00:22:00,720 --> 00:22:03,220\n何？ 何？ 何？", srt)
+        self.assertIn("1\n00:22:00,720 --> 00:22:03,720\n何？ 何？ 何？", srt)
         self.assertNotIn("何？\n何？\n何？", srt)
 
     def test_keeps_long_same_speaker_utterances_stacked_after_overlap_merge(self):
@@ -228,7 +228,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
             "前は1時間2時間ぐらいかかって。",
             srt,
         )
-        self.assertIn("2\n00:00:27,020 --> 00:00:27,500\nかかりました。", srt)
+        self.assertIn("2\n00:00:27,020 --> 00:00:28,000\nかかりました。", srt)
         self.assertNotIn("-かかりました。", srt)
 
     def test_keeps_short_sentence_tail_with_previous_long_utterance(self):
@@ -270,7 +270,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
 
         srt = convert_payload_to_srt(payload)
 
-        self.assertIn("00:06:49,550 --> 00:06:53,830", srt)
+        self.assertIn("00:06:49,550 --> 00:06:54,330", srt)
         self.assertNotIn("\n2\n", srt)
 
     def test_keeps_question_tail_before_close_speaker_reply(self):
@@ -521,7 +521,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
 
         self.assertIn("-一番流行ってるってスパイス。", srt)
         self.assertIn("-ニューヨークで流行ってるスパイス？", srt)
-        self.assertIn("2\n00:04:10,470 --> 00:04:10,820\nそう。", srt)
+        self.assertIn("2\n00:04:10,470 --> 00:04:11,320\nそう。", srt)
         self.assertNotIn("-そう。", srt)
 
     def test_does_not_merge_speaker_turns_when_gap_is_too_large(self):
@@ -534,8 +534,8 @@ class ElevenLabsSrtTests(unittest.TestCase):
 
         srt = convert_payload_to_srt(payload)
 
-        self.assertIn("1\n00:00:00,000 --> 00:00:00,500\n先です。", srt)
-        self.assertIn("2\n00:00:02,000 --> 00:00:02,500\n後です。", srt)
+        self.assertIn("1\n00:00:00,000 --> 00:00:01,000\n先です。", srt)
+        self.assertIn("2\n00:00:02,000 --> 00:00:03,000\n後です。", srt)
         self.assertNotIn("-先です。", srt)
 
     def test_respects_common_segment_options(self):
@@ -554,7 +554,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
         )
 
         self.assertIn("1\n00:00:00,000 --> 00:00:00,600\n一二", srt)
-        self.assertIn("2\n00:00:00,600 --> 00:00:01,200\n三四", srt)
+        self.assertIn("2\n00:00:00,600 --> 00:00:01,700\n三四", srt)
 
     def test_convert_file_writes_srt(self):
         root = self._make_temp_dir()
@@ -569,7 +569,7 @@ class ElevenLabsSrtTests(unittest.TestCase):
 
         self.assertEqual(
             output_path.read_text(encoding="utf-8"),
-            "1\n00:00:00,000 --> 00:00:00,400\nはい。\n",
+            "1\n00:00:00,000 --> 00:00:00,900\nはい。\n",
         )
 
     def test_raises_when_json_has_no_timed_words(self):
@@ -776,6 +776,90 @@ class ElevenLabsSrtTests(unittest.TestCase):
         # The contiguous digit run survives — `in` won't span newlines,
         # so this asserts the digits all live on a single line.
         self.assertIn("12345", srt)
+
+    def test_hold_extends_last_block_by_full_amount(self):
+        # No following block to constrain — the only block gets the
+        # full hold extension applied to its end time.
+        payload = {"words": [word("はい。", 0.0, 0.4)]}
+
+        srt = _convert_payload_with_options(
+            payload,
+            SrtFormatOptions(
+                subtitle_hold_after_end_s=0.6,
+                min_inter_subtitle_gap_s=0.08,
+            ),
+        )
+
+        self.assertIn("00:00:00,000 --> 00:00:01,000\nはい。", srt)
+
+    def test_hold_caps_middle_block_at_next_block_minus_min_gap(self):
+        # Block 1 (0.0→0.5) wants to extend by hold=0.5 to 1.0, but
+        # block 2 starts at 0.8 — cap is 0.8 - min_gap(0.08) = 0.72.
+        # Block 2 (last) gets the full hold to 1.5 + 0.5 = 2.0.
+        payload = {
+            "words": [
+                word("先です。", 0.0, 0.5, "speaker_0"),
+                word("後です。", 0.8, 1.5, "speaker_1"),
+            ]
+        }
+
+        srt = _convert_payload_with_options(
+            payload,
+            SrtFormatOptions(
+                subtitle_hold_after_end_s=0.5,
+                min_inter_subtitle_gap_s=0.08,
+            ),
+        )
+
+        self.assertIn("1\n00:00:00,000 --> 00:00:00,720\n先です。", srt)
+        self.assertIn("2\n00:00:00,800 --> 00:00:02,000\n後です。", srt)
+
+    def test_hold_does_not_shrink_back_to_back_blocks(self):
+        # Blocks 1-3 sit at 0.0→0.45, 0.45→0.8, 0.8→1.15 (no gap
+        # between them). cap = next.start - 0.08 < block.end, so the
+        # no-shrink rule keeps each end exactly as the segmenter laid
+        # it out. Only the last block (1.15→1.5) extends by hold.
+        payload = {
+            "words": [
+                word("一。", 0.0, 0.1, "speaker_0"),
+                word("二。", 0.1, 0.1, "speaker_1"),
+                word("三。", 0.1, 0.1, "speaker_1"),
+                word("四。", 0.2, 0.2, "speaker_1"),
+                word("五。", 0.3, 0.3, "speaker_0"),
+                word("六。", 0.5, 0.6, "speaker_1"),
+            ]
+        }
+
+        srt = _convert_payload_with_options(
+            payload,
+            SrtFormatOptions(
+                max_lines_per_block=2,
+                subtitle_hold_after_end_s=0.5,
+                min_inter_subtitle_gap_s=0.08,
+            ),
+        )
+
+        self.assertIn("1\n00:00:00,000 --> 00:00:00,450", srt)
+        self.assertIn("2\n00:00:00,450 --> 00:00:00,800", srt)
+        self.assertIn("3\n00:00:00,800 --> 00:00:01,150", srt)
+        self.assertIn("4\n00:00:01,150 --> 00:00:02,000", srt)
+
+    def test_hold_disabled_when_zero(self):
+        # subtitle_hold_after_end_s=0 disables the extension pass —
+        # block ends remain at the exact ASR speech end times.
+        payload = {
+            "words": [
+                word("先です。", 0.0, 0.5, "speaker_0"),
+                word("後です。", 2.0, 2.5, "speaker_1"),
+            ]
+        }
+
+        srt = _convert_payload_with_options(
+            payload, SrtFormatOptions(subtitle_hold_after_end_s=0)
+        )
+
+        self.assertIn("1\n00:00:00,000 --> 00:00:00,500\n先です。", srt)
+        self.assertIn("2\n00:00:02,000 --> 00:00:02,500\n後です。", srt)
 
 
 if __name__ == "__main__":

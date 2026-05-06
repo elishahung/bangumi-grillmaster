@@ -45,6 +45,12 @@ Rules:
 - Use `.pre_pass/pre_pass.json` for summary, cast, term glossary, and segment summaries.
 - Use frames only when text context is insufficient.
 - Prefer editing only text lines inside each block.
+- Preserve intentional Japanese address register and honorifics when they are already present in the Traditional Chinese subtitles. Do not remove or flatten suffixes such as `桑`, `醬`, `君`, `大人`, `前輩`, or `後輩` just to make the line sound more localized. Keep the speaker's polite/plain register contrast through word choice, but treat this as a preservation rule, not a reason to over-edit otherwise natural lines.
+- Do not force terminology, proper-noun, or name localization when the existing subtitle is not clearly wrong. For program titles, talent names, group names, segment labels, and other proper nouns, keep Japanese or established romanized forms when there is no genuinely common Traditional Chinese (Taiwan) rendering. For example, preserve `テツヤ` if the source subtitles intentionally keep it that way; do not change it to `Tetsuya` unless there is a clear project glossary or common-use reason.
+- Before polishing a line, identify its variety-show function in context: setup, answer, reaction, roast, self-defense, callback, team-name reference, person-name reference, song/title reference, or scoreboard/segment flow. Preserve that function even when a literal translation sounds smoother.
+- Treat recurring team names, nicknames, segment labels, challenge names, and running jokes as show-specific terms. Check nearby blocks, `.pre_pass/pre_pass.json`, and the Japanese source before turning them into generic descriptions. For example, a term like `黒帯` may be a team or performer name in context, not a literal martial-arts rank.
+- Keep spoken Mandarin/Taiwan Traditional Chinese subtitle rhythm. Prefer natural conversational particles and compact phrasing when the Japanese line is a quick retort, interruption, or defense; avoid over-formal explanations that flatten the variety-show timing.
+- When correcting an awkward but context-dependent line, optimize for the intended joke/interaction over word-for-word equivalence. If the line is about a prior on-screen match, quiz team, or segment action, make that relationship explicit enough for viewers to follow.
 - Keep subtitle line breaks balanced for on-screen display. When changing a two-line subtitle, do not leave one line much longer than the other if a natural break can make the visual width more even. Prefer breaks at phrase boundaries, for example:
 
 ```text

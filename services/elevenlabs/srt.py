@@ -72,6 +72,8 @@ MAX_INLINE_SHORT_UTTERANCE_CHARS = 8
 MAX_ORPHAN_TAIL_CHARS = 8
 MIN_SEGMENT_DURATION_S = 0.35
 DRAG_FILLER_MIN_DURATION_S = 0.6
+SUBTITLE_HOLD_AFTER_END_S = 0.5
+MIN_INTER_SUBTITLE_GAP_S = 0.08
 DIALOGUE_PREFIX = "-"
 INCLUDE_SPEAKER_PREFIX_FOR_DIALOGUE = True
 TEXT_JOIN_LANGUAGE = "ja"
@@ -115,6 +117,24 @@ IGNORED_WORD_TYPES: frozenset[str] = frozenset({"audio_event"})
 #
 # Both values can be overridden per-test via SrtFormatOptions; production
 # uses the constants.
+#
+# SUBTITLE_HOLD_AFTER_END_S = 0.5
+# MIN_INTER_SUBTITLE_GAP_S  = 0.08
+#   ASR end times match the exact speech end, but a viewer's eye needs
+#   a beat to finish reading after the talker stops. The Netflix Timed
+#   Text Style Guide (Japanese) sets the minimum on-screen hold at
+#   0.5 s; the BBC and EBU give similar guidance ("≥0.4 s after speech
+#   ends" is the common practitioner rule). 0.5 is the comfortable
+#   default; 0.3-0.4 would feel tighter for rapid variety-show banter
+#   if needed.
+#   The 0.08 s minimum gap to the next block (≈2 frames at 25 fps) is
+#   the EBU/Netflix "≤2 frames OR ≥500 ms — nothing in between" rule:
+#   the perceptual flicker zone is the awkward 80-500 ms window, so we
+#   either butt blocks tightly (gap ≈ 80 ms) or leave a clear hold
+#   (gap ≥ 500 ms when the next block is far away). Tight back-to-back
+#   blocks (`next.start ≈ previous.end`) get no extension — the cap
+#   sits below the existing end and the no-shrink rule keeps them as
+#   the segmenter laid them out.
 # ---------------------------------------------------------------------
 
 
@@ -143,6 +163,8 @@ class SrtFormatOptions:
     max_orphan_tail_chars: int = MAX_ORPHAN_TAIL_CHARS
     min_segment_duration_s: float = MIN_SEGMENT_DURATION_S
     drag_filler_min_duration_s: float = DRAG_FILLER_MIN_DURATION_S
+    subtitle_hold_after_end_s: float = SUBTITLE_HOLD_AFTER_END_S
+    min_inter_subtitle_gap_s: float = MIN_INTER_SUBTITLE_GAP_S
     split_on_punctuation: str = JAPANESE_HARD_PUNCTUATION
     soft_split_punctuation: str = JAPANESE_SOFT_PUNCTUATION
     dialogue_prefix: str = DIALOGUE_PREFIX
@@ -216,6 +238,7 @@ def _convert_payload_with_options(
                     block.utterances, options
                 )
     _resolve_block_overlaps(blocks, options)
+    _extend_subtitle_hold_times(blocks, options)
     return _render_srt(blocks, options)
 
 
@@ -559,6 +582,29 @@ def _resolve_block_overlaps(
         current.start = previous.end
         if current.end <= current.start:
             current.end = current.start + options.min_segment_duration_s
+
+
+def _extend_subtitle_hold_times(
+    blocks: list[SubtitleBlock], options: SrtFormatOptions
+) -> None:
+    """Extend each block's end time so subtitles linger briefly after
+    speech ends. Capped at the next block's start (minus a small
+    inter-subtitle gap) so we never introduce overlap; never shrinks
+    an existing end time."""
+    if options.subtitle_hold_after_end_s <= 0 or not blocks:
+        return
+
+    hold = options.subtitle_hold_after_end_s
+    min_gap = options.min_inter_subtitle_gap_s
+    for index, block in enumerate(blocks):
+        desired_end = block.end + hold
+        if index + 1 < len(blocks):
+            cap_end = blocks[index + 1].start - min_gap
+            new_end = min(desired_end, cap_end)
+        else:
+            new_end = desired_end
+        if new_end > block.end:
+            block.end = new_end
 
 
 def _inline_same_speaker_utterances(
