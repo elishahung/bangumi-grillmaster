@@ -45,6 +45,19 @@ Rules:
 - Use `.pre_pass/pre_pass.json` for summary, cast, term glossary, and segment summaries.
 - Use frames only when text context is insufficient.
 - Prefer editing only text lines inside each block.
+- Keep subtitle line breaks balanced for on-screen display. When changing a two-line subtitle, do not leave one line much longer than the other if a natural break can make the visual width more even. Prefer breaks at phrase boundaries, for example:
+
+```text
+但有一個人，讓我們把原本
+陌生的西洋音樂聽得更親近。
+```
+
+instead of:
+
+```text
+但有一個人，讓我們把原本陌生的西洋音樂
+聽得更親近。
+```
 
 For large SRT files, chunk by stable index ranges and stitch text back into the original skeleton. Only delegate ranges to subagents when the active instructions and user request allow agent delegation; otherwise process ranges locally. Each range pass must return replacements keyed by block index, not a full reindexed SRT.
 
