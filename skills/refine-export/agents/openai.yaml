@@ -1,0 +1,6 @@
+interface:
+  display_name: "Refine Export"
+  short_description: "Manual subtitle, cover, and export runbook"
+  default_prompt: "Use $refine-export to refine subtitles, generate a cover, and export a burned-in video."
+policy:
+  allow_implicit_invocation: false
