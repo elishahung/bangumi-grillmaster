@@ -8,7 +8,7 @@ description: "Manual-only workflow. Use this skill only when the user explicitly
 Use this skill only after an explicit `/refine-export` or `$refine-export` request. The workflow turns one completed grilled project folder into final deliverables:
 
 1. `video.cht.refined.srt` from `video.cht.srt`, refined as Traditional Chinese subtitles translated from Japanese.
-2. `poster.cover.png` from `poster.jpg`.
+2. `poster.cover.png` from `poster.jpg`, generated in parallel when delegation is available.
 3. `~/Downloads/<project id>/poster.cover.png` and `~/Downloads/<project id>/<project name>.mp4` with burned-in subtitles.
 
 ## Network path handling
@@ -56,37 +56,42 @@ python <skill>/scripts/validate_srt_structure.py video.cht.srt video.cht.refined
 
 Fix every reported issue before export.
 
-## Step 2: Generate cover image
+## Step 2: Start cover image generation
 
-Use the image generation/editing tool on `poster.jpg`. Inspect the actual poster before writing the prompt. The cover task is a style conversion of the original poster, not a redesign.
+Use the image generation/editing tool on `poster.jpg`. Inspect the actual poster before writing the prompt. The cover task is a reinterpretation of the original poster as if the same people and poster concept appeared inside a Rick-and-Morty-like adult animated cartoon, not a photo-shaped filter pass.
+
+Start this as early as possible after inspecting `poster.jpg`, ideally while subtitle refinement or ffmpeg export continues. If active instructions allow subagents, launch one cover-generation sidecar agent with the project path, the current `poster.jpg` observations, the prompt rules below, and the requirement to save/copy the final image to `poster.cover.png`. Tell the sidecar agent it is not alone in the project folder and must not edit subtitles, video files, scripts, or unrelated artifacts. Continue the main workflow locally with subtitle validation and video export while the cover sidecar runs. If delegation is not available, generate the cover locally but do not delay subtitle refinement before starting it.
 
 Cover rules:
 
-- Preserve the original poster composition, people count, relative positions, facial identity cues, props, background, callout shapes, and visual hierarchy.
+- Preserve the original poster concept, people count, relative positions, props, background, callout shapes, visible text meaning, and visual hierarchy.
+- Reimagine each person as a native character in a Rick-and-Morty-inspired American adult animated cartoon. Do not preserve photographic head shapes, skin texture, lighting, lens effects, or cutout-photo edges when they make the result look like a filter.
+- Keep recognizable identity cues such as hairstyle, glasses, facial hair, expression, pose, relative body size, and distinctive facial proportions, but simplify them into cartoon construction.
 - Preserve the original meaning and layout of visible text, but convert Japanese text into concise English.
 - Do not add new objects, characters, logos, story themes, food, badges, or titles that are not present in the original poster unless the user explicitly requests them.
 - Do not reuse stale prompt details from previous projects. In particular, do not mention malatang, a bowl, six heads, a bottom branding strip, sci-fi additions, or other elements unless they are visible in the current `poster.jpg`.
-- Apply only a Rick-and-Morty-inspired American adult animated cartoon rendering style: thick black outlines, flat saturated colors, simplified shading, expressive eyes and mouths, and slightly grotesque comedy caricature.
-- Keep recognizable identity cues. Do not intentionally make the people look like different people.
+- Apply only a Rick-and-Morty-inspired American adult animated cartoon rendering style: thick uneven black outlines, flat saturated colors, simplified shading, large uneven eyes, exaggerated mouths and teeth, rubbery facial geometry, and slightly grotesque comedy caricature.
+- Do not intentionally make the people look like different people.
 - Avoid the word "sci-fi" in the prompt unless the source poster already has sci-fi elements or the user asks for sci-fi.
 
 Use this prompt shape, replacing bracketed text with what is actually visible in the poster:
 
 ```text
-Transform the original poster into a Rick-and-Morty-inspired American adult animated cartoon style. Keep the same composition, the same number of people, the same relative positions, the same props/background/callout shapes, and the same visual hierarchy. Keep each person's recognizable identity cues while simplifying them into thick black outlines, flat saturated colors, minimal shading, expressive eyes, and grotesque comedy caricature. Convert all visible Japanese text into concise English with the same meaning and similar placement: [list each visible text item and its English replacement]. Do not add new characters, objects, logos, food, badges, sci-fi elements, or extra text. Do not change the poster concept; only convert the existing poster into this cartoon style.
+Reimagine the original poster as if this exact variety-show poster existed inside a Rick-and-Morty-inspired American adult animated cartoon. Keep the same poster concept, same number of people, same relative positions, same props/background/callout shapes, same visible text hierarchy, and same overall layout, but redraw the people as native cartoon characters rather than preserving photo-real head shapes or applying a filter. Keep each person's recognizable identity cues: [briefly list visible cues such as hairstyle, glasses, pose, expression, clothing, relative size]. Use thick uneven black outlines, flat saturated colors, simplified shading, large uneven eyes, exaggerated mouths and teeth, rubbery facial geometry, and slightly grotesque comedy caricature. Convert all visible Japanese text into concise English with the same meaning and similar placement: [list each visible text item and its English replacement]. Do not add new characters, objects, logos, food, badges, sci-fi elements, or extra text. Do not change the poster concept; redraw only the existing poster into this cartoon universe.
 ```
 
 Save or copy the generated image to `poster.cover.png` in the project folder. If the image tool saves under `C:\Users\eli\.codex\generated_images\...`, copy the newest generated PNG to the project folder and leave the original in place. After copying, verify `poster.cover.png` exists before exporting.
 
 ## Step 3: Export deliverables
 
-Use the bundled export script so naming and paths stay consistent:
+Use the bundled export script so naming and paths stay consistent. Export the video and cover as two independent operations; both operations create `~/Downloads/<project id>` before writing.
 
 ```powershell
-python <skill>/scripts/export_media.py <project-dir>
+python <skill>/scripts/export_media.py video <project-dir>
+python <skill>/scripts/export_media.py cover <project-dir>
 ```
 
-The script creates `~/Downloads/<project id>`, copies `poster.cover.png`, and writes `<project name>.mp4` using ffmpeg with burned-in subtitles:
+The video export writes `<project name>.mp4` using ffmpeg with burned-in subtitles:
 
 ```text
 subtitles=video.cht.refined.srt:force_style='Fontname=Microsoft JhengHei,Fontsize=22,Bold=1,Outline=1.5'
@@ -94,9 +99,22 @@ subtitles=video.cht.refined.srt:force_style='Fontname=Microsoft JhengHei,Fontsiz
 
 The script runs ffmpeg from the project directory so the subtitle filter can use the simple relative subtitle path.
 
+If `poster.cover.png` is still being generated by the sidecar agent after `video.cht.refined.srt` has passed validation, do not wait before starting the video encode. Run the video export:
+
+```powershell
+python <skill>/scripts/export_media.py video <project-dir>
+```
+
+After the sidecar produces `poster.cover.png`, export only the cover:
+
+```powershell
+python <skill>/scripts/export_media.py cover <project-dir>
+```
+
 ## Operational notes
 
 - Before generating a cover, check whether `poster.cover.png` already exists. If it exists and the user did not ask to regenerate it, reuse it.
+- When a cover sidecar agent is running, continue the main workflow until the next step actually needs the cover. Wait for the sidecar only before the final response or before running the cover export.
 - If a prior turn was interrupted, verify which artifacts already exist before repeating work.
 - Prefer commands that do not print long non-ASCII paths when running under Windows console code pages. If needed, print short status fields or use JSON with UTF-8-safe output to avoid `UnicodeEncodeError`.
 - Treat cover generation as one-shot. Do not regenerate automatically just because the result is imperfect. If the generated poster is missing, malformed, or visibly changes the people/elements too much, report that in the final response so the user can decide whether to revise the skill prompt or rerun the cover step.

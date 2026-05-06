@@ -1,4 +1,4 @@
-"""Export a grilled project to Downloads with cover and burned-in subtitles."""
+"""Export grilled project deliverables to Downloads."""
 from __future__ import annotations
 
 import argparse
@@ -53,7 +53,7 @@ def build_ffmpeg_command(output_video: Path, subtitle_style: str) -> list[str]:
     ]
 
 
-def export_project(project_dir: Path, downloads_dir: Path, subtitle_style: str, dry_run: bool) -> Path:
+def resolve_output_paths(project_dir: Path, downloads_dir: Path) -> tuple[Path, Path, Path]:
     project_dir = project_dir.resolve()
     project = load_project(project_dir)
     project_id = str(project.get("id") or "").strip()
@@ -63,13 +63,18 @@ def export_project(project_dir: Path, downloads_dir: Path, subtitle_style: str, 
     if not project_name:
         raise ValueError("project.json is missing name")
 
-    require_file(project_dir / "video.mp4")
-    require_file(project_dir / "video.cht.refined.srt")
-    require_file(project_dir / "poster.cover.png")
-
     output_dir = downloads_dir / project_id
     output_video = output_dir / f"{sanitize_filename(project_name)}.mp4"
     output_cover = output_dir / "poster.cover.png"
+    return output_dir, output_video, output_cover
+
+
+def export_video(project_dir: Path, downloads_dir: Path, subtitle_style: str, dry_run: bool) -> Path:
+    project_dir = project_dir.resolve()
+    require_file(project_dir / "video.mp4")
+    require_file(project_dir / "video.cht.refined.srt")
+
+    output_dir, output_video, output_cover = resolve_output_paths(project_dir, downloads_dir)
     command = build_ffmpeg_command(output_video, subtitle_style)
 
     print(f"output_dir={output_dir}")
@@ -81,13 +86,31 @@ def export_project(project_dir: Path, downloads_dir: Path, subtitle_style: str, 
         return output_dir
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(project_dir / "poster.cover.png", output_cover)
     subprocess.run(command, cwd=project_dir, check=True)
+    return output_dir
+
+
+def export_cover(project_dir: Path, downloads_dir: Path, dry_run: bool) -> Path:
+    project_dir = project_dir.resolve()
+    require_file(project_dir / "poster.cover.png")
+
+    output_dir, output_video, output_cover = resolve_output_paths(project_dir, downloads_dir)
+
+    print(f"output_dir={output_dir}")
+    print(f"cover={output_cover}")
+    print(f"video={output_video}")
+
+    if dry_run:
+        return output_dir
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(project_dir / "poster.cover.png", output_cover)
     return output_dir
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("target", choices=["video", "cover"])
     parser.add_argument("project_dir", type=Path)
     parser.add_argument("--downloads-dir", type=Path, default=Path.home() / "Downloads")
     parser.add_argument("--subtitle-style", default=DEFAULT_SUBTITLE_STYLE)
@@ -95,7 +118,10 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        export_project(args.project_dir, args.downloads_dir, args.subtitle_style, args.dry_run)
+        if args.target == "video":
+            export_video(args.project_dir, args.downloads_dir, args.subtitle_style, args.dry_run)
+        else:
+            export_cover(args.project_dir, args.downloads_dir, args.dry_run)
     except Exception as exc:  # noqa: BLE001 - CLI should surface concise failures.
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
