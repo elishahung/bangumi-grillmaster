@@ -65,3 +65,5 @@ Final state:
 
 - `video.cht.refined.srt` exists in the current working directory. Block count, indexes, and timecodes must match `video.cht.srt` exactly. Every block's text must be non-empty Traditional Chinese.
 - `.refine/report.md` exists with the table described above.
+
+Reply with just the single word `done`. Do not include explanations, summaries, edit lists, file paths, or any other commentary — the report file already covers the substantive changes, the calling workflow ignores your final message, and any extra tokens are wasted.

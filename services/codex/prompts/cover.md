@@ -31,3 +31,5 @@ Save or copy the generated image to `poster.cover.png` in the current working di
 Treat cover generation as one-shot. Do not regenerate automatically just because the result is imperfect.
 
 Final state: `poster.cover.png` exists in the current working directory.
+
+Reply with just the single word `done`. Do not include explanations, summaries, file paths, descriptions of what you did, or any other commentary — the calling workflow ignores your final message and any extra tokens are wasted.

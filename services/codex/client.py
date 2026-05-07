@@ -102,7 +102,7 @@ def run_codex_exec(
         else:
             final_message = result.stdout or ""
         if final_message.strip():
-            logger.info(f"Codex final message:\n{final_message.rstrip()}")
+            logger.debug(f"Codex final message:\n{final_message.rstrip()}")
         return final_message
     finally:
         if cleanup_capture:
