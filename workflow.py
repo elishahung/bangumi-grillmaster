@@ -7,6 +7,7 @@ of the video captioning workflow, from fetching metadata to translation.
 from project import Project, ProgressStage, VideoSource
 from loguru import logger
 from settings import settings
+from services.ass import convert_file as convert_srt_to_ass
 from services.elevenlabs import ElevenLabsASR, convert_file
 from services.gemini import Gemini, GeminiTranslationError, TranslationRequest
 from services.media import MediaProcessor
@@ -82,7 +83,8 @@ def process_project(
     4. Extract audio from video
     5. Perform automatic speech recognition (ASR) and write source SRT
     6. Translate subtitles using Gemini
-    7. Archive project (optional)
+    7. Convert translated SRT into a styled ASS subtitle file
+    8. Archive project (optional)
 
     Each stage is skipped if it has already been completed (idempotent).
     Progress is automatically saved after each stage.
@@ -239,6 +241,19 @@ def process_project(
             logger.debug("Stage skipped: Translation already completed")
         if _should_stop_after_stage(
             project_id, break_after, ProgressStage.TRANSLATED
+        ):
+            return
+
+        # Process ASS conversion
+        if not project.is_ass_converted:
+            logger.info(f"Stage: Converting SRT to ASS for {project_id}")
+            convert_srt_to_ass(project.translated_path, project.ass_path)
+            project.mark_progress(ProgressStage.ASS_CONVERTED)
+            logger.success("Stage complete: ASS generated")
+        else:
+            logger.debug("Stage skipped: ASS already generated")
+        if _should_stop_after_stage(
+            project_id, break_after, ProgressStage.ASS_CONVERTED
         ):
             return
 

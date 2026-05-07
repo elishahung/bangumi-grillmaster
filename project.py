@@ -24,6 +24,7 @@ AUDIO_FILE_NAME = "audio.opus"
 ASR_FILE_NAME = "asr.json"
 SRT_FILE_NAME = "video.ja.srt"
 TRANSLATED_FILE_NAME = "video.cht.srt"
+ASS_FILE_NAME = "video.cht.ass"
 PRE_PASS_FILE_NAME = "pre_pass.json"
 ASR_CACHE_DIR_NAME = ".asr"
 CHUNKS_CACHE_DIR_NAME = ".chunks"
@@ -44,6 +45,7 @@ class ProgressStage(str, Enum):
     ASR_COMPLETED = "is_asr_completed"
     SRT_COMPLETED = "is_srt_completed"
     TRANSLATED = "is_translated"
+    ASS_CONVERTED = "is_ass_converted"
 
 
 class VideoSource(str, Enum):
@@ -87,6 +89,7 @@ class Project(BaseModel):
         is_asr_completed: Whether speech recognition has been completed.
         is_srt_completed: Whether SRT subtitle file has been generated.
         is_translated: Whether translation has been completed.
+        is_ass_converted: Whether the styled ASS subtitle file has been generated.
     """
 
     id: str
@@ -106,6 +109,7 @@ class Project(BaseModel):
     is_asr_completed: bool = False
     is_srt_completed: bool = False
     is_translated: bool = False
+    is_ass_converted: bool = False
 
     @staticmethod
     def parse_source_str(source_str: str) -> str:
@@ -501,6 +505,11 @@ class Project(BaseModel):
             Path to translated.srt.
         """
         return self.project_path / TRANSLATED_FILE_NAME
+
+    @property
+    def ass_path(self) -> Path:
+        """Get the path to the styled ASS subtitle file."""
+        return self.project_path / ASS_FILE_NAME
 
     @property
     def pre_pass_path(self) -> Path:

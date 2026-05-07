@@ -1,6 +1,6 @@
 # Bangumi GrillMaster
 
-下載日本綜藝節目，生成繁體中文 SRT 字幕方便個人使用識讀
+下載日本綜藝節目，生成繁體中文 SRT / ASS 字幕方便個人使用識讀
 
 ![](/doc/image2.jpg)
 ![](/doc/image3.png)
@@ -52,6 +52,8 @@ Video ID
 產生 SRT 字幕
     ↓
 翻譯字幕 (Gemini: pre-pass → 併發 chunk 翻譯 → 組裝驗證)
+    ↓
+轉成 ASS (套用樣式 + Netflix TC 標點清理)
     ↓
 歸檔 (可選)
 ```
@@ -153,5 +155,6 @@ projects/{video_id}/
 ├── .pre_pass/        # Gemini pre-pass 簡報與圖片快取
 │   └── pre_pass.json
 ├── .chunks/          # chunk 音檔 / 圖片 / 翻譯回應快取（供 resume）
-└── video.cht.srt     # 繁體中文翻譯字幕
+├── video.cht.srt     # 繁體中文翻譯字幕
+└── video.cht.ass     # 套用樣式並清理標點後的 ASS 字幕
 ```
