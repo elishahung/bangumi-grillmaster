@@ -62,10 +62,11 @@ def run_codex_exec(
     ]
     for img in images or []:
         cmd += ["--image", str(img.resolve())]
-    cmd += ["--", prompt]
+    cmd.append("--")
 
     logger.debug(
-        f"Running codex exec: argv={cmd[:-1] + ['<prompt:' + str(len(prompt)) + ' chars>']} "
+        f"Running codex exec: argv={cmd} "
+        f"prompt_chars={len(prompt)} (via stdin) "
         f"timeout={effective_timeout}s"
     )
 
@@ -79,6 +80,7 @@ def run_codex_exec(
                 errors="replace",
                 timeout=effective_timeout,
                 capture_output=True,
+                input=prompt,
             )
         except subprocess.TimeoutExpired as exc:
             raise CodexInvocationError(
