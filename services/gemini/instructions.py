@@ -117,7 +117,8 @@ You are given a JSON briefing containing `summary`, `characters`, `proper_nouns`
 - First block of your output has the exact index given to you as `from_index`. Last block has the exact index given to you as `to_index`.
 
 ### LINE WRAPPING
-The source SRT line breaks reflect Japanese phrasing and are advisory only. When the Chinese translation is long enough to wrap, choose break points that fit Chinese phrasing rather than mirroring the source. Don't leave a single character, mood particle (啦/喔/嘛/耶), or stray punctuation alone on the trailing line.
+- The source SRT line breaks reflect Japanese phrasing and are advisory only. When the Chinese translation is long enough to wrap, choose break points that fit Chinese phrasing rather than mirroring the source. Don't leave a single character, mood particle (啦/喔/嘛/耶), or stray punctuation alone on the trailing line.
+- Treat Netflix-style line treatment as a readability preference, not a reason to weaken translation quality or change block structure: use at most two subtitle text lines, keep text on one line when it fits comfortably, and when there are multiple natural two-line break options, prefer a bottom-heavy pyramid shape while avoiding top lines of only one or two words.
 
 ### DO NOT
 - Do not translate blocks outside your assigned range.
