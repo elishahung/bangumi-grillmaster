@@ -23,10 +23,11 @@ Rules:
 - Do not change SRT indexes or timecodes.
 - Do not merge or split blocks.
 - Keep the block count identical to `video.cht.srt`.
-- Use `video.ja.srt` as the Japanese source-language reference, but account for ASR mistakes.
+- Treat `video.cht.srt` as the refinement baseline. Do not retranslate every block from `video.ja.srt`. Consult `video.ja.srt`, `.pre_pass/pre_pass.json`, and optional frames when the Chinese line is awkward, inconsistent, semantically suspicious, or conflicts with recurring terms/context.
+- Treat source conflicts as context-dependent: `video.ja.srt` is ASR output and may be wrong, while `video.cht.srt` was translated by an LLM with video/audio input and may sometimes be more accurate than the ASR Japanese. When they disagree, judge by nearby context, `.pre_pass/pre_pass.json`, optional frames, and the overall segment meaning instead of blindly trusting either file.
 - Avoid unsupported subject insertion: When comparing against `video.ja.srt`, remove explicit Chinese subjects such as「我 / 你 / 他 / 她 / 我們 / 大家」or specific names if they were added only for smoothness and are not stated or clearly implied by the Japanese source, immediate context, audio, visuals, or `.pre_pass/pre_pass.json`. Prefer natural subjectless Chinese when the actor is ambiguous.
 - The refined subtitle text must be Traditional Chinese. Do not leave Japanese in the subtitle text unless it is an intentional proper noun, title, service name, or quoted term that should remain untranslated.
-- Use `.pre_pass/pre_pass.json` for summary, cast, term glossary, and segment summaries.
+- Use `.pre_pass/pre_pass.json` for `summary`, `characters`, `proper_nouns`, `glossary`, `catchphrases`, `tone_notes`, and `segment_summaries`. Apply `tone_notes` to register/honorific decisions and `catchphrases` to keep recurring jokes phrased identically across blocks.
 - Use frames only when text context is insufficient.
 - Prefer editing only text lines inside each block.
 - Preserve intentional Japanese address register and honorifics when they are already present in the Traditional Chinese subtitles. Do not remove or flatten suffixes such as `桑`, `醬`, `君`, `大人`, `前輩`, or `後輩` just to make the line sound more localized. Keep the speaker's polite/plain register contrast through word choice, but treat this as a preservation rule, not a reason to over-edit otherwise natural lines.
@@ -35,7 +36,9 @@ Rules:
 - Treat recurring team names, nicknames, segment labels, challenge names, and running jokes as show-specific terms. Check nearby blocks, `.pre_pass/pre_pass.json`, and the Japanese source before turning them into generic descriptions. For example, a term like `黒帯` may be a team or performer name in context, not a literal martial-arts rank.
 - Keep spoken Mandarin/Taiwan Traditional Chinese subtitle rhythm. Prefer natural conversational particles and compact phrasing when the Japanese line is a quick retort, interruption, or defense; avoid over-formal explanations that flatten the variety-show timing.
 - When correcting an awkward but context-dependent line, optimize for the intended joke/interaction over word-for-word equivalence. If the line is about a prior on-screen match, quiz team, or segment action, make that relationship explicit enough for viewers to follow.
-- Keep subtitle line breaks balanced for on-screen display. When changing a two-line subtitle, do not leave one line much longer than the other if a natural break can make the visual width more even. Prefer breaks at phrase boundaries, for example:
+- Apply only light Traditional Chinese subtitle style cleanup at this refinement stage: do not rewrite a line that is already accurate, natural, and readable.
+- Prefer subtitle typography only when it requires language judgment: use `「」` for quoted speech or quoted terms, `『』` for nested quotes, and `《》` for titles of works when a title mark is clearly needed. Do not spend attention on punctuation cleanup that can be handled mechanically later.
+- Keep line wrapping readable, not mechanical: use at most two subtitle text lines, keep one line when it fits naturally, and when editing an existing two-line subtitle, break at Chinese phrase boundaries. Prefer a bottom-heavy shape only when there are multiple natural break points; avoid leaving one or two characters, a lone particle, or stray punctuation on a line. For example:
 
 ```text
 但有一個人，讓我們把原本
@@ -48,6 +51,10 @@ instead of:
 但有一個人，讓我們把原本陌生的西洋音樂
 聽得更親近。
 ```
+
+- Normalize only clearly awkward number style: use half-width Arabic numerals for precise values, dates, times, measurements, scores, rankings, episode/chapter numbers, and money when compactness matters. Use Chinese numerals for short rounded spoken expressions when they read more naturally. Do not mix Arabic and Chinese numerals inside one number phrase.
+- For repeated words, reduce mechanical duplication only when the source repeats the same word twice without comedic or emotional force. Preserve repetition when it carries timing, teasing, panic, emphasis, or a running joke.
+- Match profanity, teasing, and roast severity without censoring or intensifying it. Prefer compact Taiwan Traditional Chinese phrasing that preserves the original register and variety-show timing.
 
 For large SRT files, chunk by stable index ranges and stitch text back into the original skeleton. Each range pass must return replacements keyed by block index, not a full reindexed SRT.
 
