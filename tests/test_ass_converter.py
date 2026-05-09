@@ -13,25 +13,38 @@ from services.gemini.chunker import SrtBlock
 
 
 class AssConverterTextCleaningTests(unittest.TestCase):
-    def test_replaces_comma_with_space(self):
-        self.assertEqual(_clean_text("你好，今天天氣不錯"), "你好 今天天氣不錯")
+    def test_preserves_mid_sentence_comma(self):
+        # Netflix TC: keep mid-sentence ，
+        self.assertEqual(_clean_text("你好，今天天氣不錯"), "你好，今天天氣不錯")
 
-    def test_removes_full_stop(self):
+    def test_removes_trailing_full_stop(self):
         self.assertEqual(_clean_text("今天天氣不錯。"), "今天天氣不錯")
 
-    def test_replaces_enumeration_comma_with_space(self):
-        self.assertEqual(_clean_text("蘋果、橘子、香蕉"), "蘋果 橘子 香蕉")
+    def test_preserves_mid_sentence_enumeration_comma(self):
+        self.assertEqual(_clean_text("蘋果、橘子、香蕉"), "蘋果、橘子、香蕉")
 
-    def test_replaces_semicolon_with_space(self):
-        self.assertEqual(_clean_text("一；二；三"), "一 二 三")
+    def test_preserves_mid_sentence_semicolon(self):
+        self.assertEqual(_clean_text("一；二；三"), "一；二；三")
 
     def test_combined_punctuation(self):
-        # `。` is removed without inserting a separator (Netflix rule); typically
-        # appears at end-of-line so adjacent clauses joining is rare in practice.
+        # Mid-sentence ，/、 are kept; mid-line 。 becomes ，; trailing 。 is stripped.
         self.assertEqual(
             _clean_text("你好，今天天氣不錯。蘋果、橘子、香蕉。"),
-            "你好 今天天氣不錯蘋果 橘子 香蕉",
+            "你好，今天天氣不錯，蘋果、橘子、香蕉",
         )
+
+    def test_converts_mid_line_full_stop_to_comma(self):
+        # Bare 。 mid-subtitle reads awkwardly; replace with ， for visual flow.
+        self.assertEqual(_clean_text("第一句。第二句。"), "第一句，第二句")
+
+    def test_normalizes_halfwidth_ellipsis(self):
+        self.assertEqual(_clean_text("今晚的嘉賓是..."), "今晚的嘉賓是…")
+        # 4+ half-width dots also collapse into a single …
+        self.assertEqual(_clean_text("等等....再說"), "等等…再說")
+
+    def test_preserves_fullwidth_ellipsis(self):
+        # Existing …… is full-width and must stay untouched.
+        self.assertEqual(_clean_text("好啊……"), "好啊……")
 
     def test_preserves_question_and_exclamation(self):
         self.assertEqual(_clean_text("真的嗎？太好了！"), "真的嗎？太好了！")
@@ -43,14 +56,11 @@ class AssConverterTextCleaningTests(unittest.TestCase):
         )
         self.assertEqual(_clean_text("（旁白）"), "（旁白）")
 
-    def test_strips_leading_and_trailing_whitespace(self):
-        # Trailing space comes from a comma at end of line.
+    def test_strips_leading_and_trailing_terminal_punctuation(self):
+        # Trailing ， at line end is removed.
         self.assertEqual(_clean_text("你好，"), "你好")
-        # Leading space comes from a comma at start of line.
+        # Leading ， at line start is removed.
         self.assertEqual(_clean_text("，你好"), "你好")
-
-    def test_collapses_consecutive_spaces_from_adjacent_punctuation(self):
-        self.assertEqual(_clean_text("好，、的"), "好 的")
 
     def test_processes_multiline_text_per_line(self):
         self.assertEqual(
@@ -90,7 +100,7 @@ class AssDialogueTests(unittest.TestCase):
         line = _block_to_dialogue(block)
         self.assertEqual(
             line,
-            "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,你好 世界",
+            "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,你好，世界",
         )
 
     def test_block_to_dialogue_converts_newline_to_ass_soft_break(self):
@@ -149,7 +159,7 @@ class AssConvertFileTests(unittest.TestCase):
         self.assertIn("PlayResX: 1920", out)
         self.assertIn("Style: Default,源泉圓體月 M,64,", out)
         self.assertIn(
-            "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,你好 世界",
+            "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,你好，世界",
             out,
         )
         self.assertIn(

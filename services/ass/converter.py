@@ -1,10 +1,16 @@
 """Convert translated SRT subtitles to styled ASS format.
 
 Applies Traditional Chinese subtitle punctuation rules aligned with the
-Netflix TC style guide: replace ``，``/``、``/``；`` with a single space,
-remove ``。`` entirely, and trim leading/trailing whitespace per line.
-Other punctuation (``？``/``！``/``「」``/``（）``/``……``/``：`` etc.) is
-preserved as-is.
+Netflix TC style guide:
+
+- Strip leading/trailing ``，``/``、``/``；``/``。`` plus surrounding
+  whitespace from each line (Netflix forbids terminal commas/periods at
+  line endings).
+- Normalize half-width ``...`` (3+ dots) to full-width ``…``.
+- Convert any remaining (mid-line) ``。`` to ``，`` for smoother visual
+  flow — bare ``。`` mid-subtitle reads awkwardly.
+- Preserve mid-sentence ``，``/``、``/``；`` and all other punctuation
+  (``？``/``！``/``「」``/``『』``/``（）``/``《》``/``……``/``：``).
 """
 
 import re
@@ -31,16 +37,8 @@ Style: Default,源泉圓體月 M,64,&H00FDFDFD,&H000000FF,&H00000000,&H7D000000,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-_PUNCT_TABLE = str.maketrans(
-    {
-        "，": " ",
-        "、": " ",
-        "；": " ",
-        "。": "",
-    }
-)
-
-_MULTI_SPACE = re.compile(r" {2,}")
+_LINE_EDGE_PUNCT = re.compile(r"^[\s，、；。]+|[\s，、；。]+$")
+_HALF_ELLIPSIS = re.compile(r"\.{3,}")
 _SRT_TIMECODE = re.compile(
     r"^\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*"
     r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*$"
@@ -48,9 +46,9 @@ _SRT_TIMECODE = re.compile(
 
 
 def _clean_line(line: str) -> str:
-    cleaned = line.translate(_PUNCT_TABLE)
-    cleaned = _MULTI_SPACE.sub(" ", cleaned)
-    return cleaned.strip()
+    line = _LINE_EDGE_PUNCT.sub("", line)
+    line = _HALF_ELLIPSIS.sub("…", line)
+    return line.replace("。", "，")
 
 
 def _clean_text(text: str) -> str:
