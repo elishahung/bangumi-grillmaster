@@ -53,9 +53,13 @@ Video ID
     ↓
 翻譯字幕 (Gemini: pre-pass → 併發 chunk 翻譯 → 組裝驗證)
     ↓
-轉成 ASS (套用樣式 + Netflix TC 標點清理)
+潤飾字幕 (Codex, 可選)
+    ↓
+Finalize：格式清理，輸出 ASS (套樣式) + SRT
     ↓
 歸檔 (可選)
+    ↓
+封裝交付 (可選：字幕燒錄進影片)
 ```
 
 ## 安裝
@@ -137,24 +141,34 @@ GEMINI_CHUNK_FRAME_INTERVAL_SECONDS=30 # chunk 圖片抽樣頻率（每幾秒一
 GEMINI_CHUNK_FRAME_MAX_SIDE=768        # chunk 圖片最長邊尺寸
 GEMINI_CHUNK_MISSING_BLOCK_TOLERANCE=2 # 每塊允許未對齊/缺漏字幕區塊數上限
 
-# 可選
-COOKIES_TXT_PATH=cookies.txt   # 影片來源網站 cookies (供 yt-dlp 使用)
-ARCHIVED_PATH=NAS:\bangumi\ai\  # 歸檔路徑 - 處理完直接移至指定資料夾並將資料夾名稱改為影片名稱
+# 可選：Codex 後處理（需安裝 Codex CLI）
+ENABLE_SRT_REFINE=true             # 翻譯後再用 Codex 潤飾繁中字幕
+ENABLE_COVER_GENERATION=true       # 下載後並行 Codex 風格化封面圖
+
+# 可選：下載/歸檔/封裝
+COOKIES_TXT_PATH=cookies.txt       # 影片來源網站 cookies (供 yt-dlp 使用)
+ARCHIVED_PATH=NAS:\bangumi\ai\     # 歸檔路徑 - 處理完直接移至指定資料夾並將資料夾名稱改為影片名稱
+PACKAGE_PATH=NAS:\bangumi\package\ # 封裝路徑 - 將 ASS 字幕燒錄進影片並複製封面到 <package_path>/<id>_<name>/
 ```
 
 ## 專案結構
 
 ```
 projects/{video_id}/
-├── project.json      # 專案狀態
-├── video.mp4         # 合併後的影片
-├── video.ja.srt      # 日文原文字幕
-├── .asr/             # ASR 音檔與 ElevenLabs 原始結果
+├── project.json              # 專案狀態
+├── video.mp4                 # 合併後的影片
+├── video.ja.srt              # 日文原文字幕
+├── .asr/                     # ASR 音檔與 ElevenLabs 原始結果
 │   ├── audio.opus
 │   └── asr.json
-├── .pre_pass/        # Gemini pre-pass 簡報與圖片快取
+├── .pre_pass/                # Gemini pre-pass 簡報與圖片快取
 │   └── pre_pass.json
-├── .chunks/          # chunk 音檔 / 圖片 / 翻譯回應快取（供 resume）
-├── video.cht.srt     # 繁體中文翻譯字幕
-└── video.cht.ass     # 套用樣式並清理標點後的 ASS 字幕
+├── .chunks/                  # chunk 音檔 / 圖片 / 翻譯回應快取（供 resume）
+├── .refine/                  # Codex 潤飾快取（可選）
+├── poster.jpg                # yt-dlp 取得的原始封面
+├── poster.cover.png          # Codex 風格化封面（可選）
+├── video.cht.srt             # 繁體中文翻譯字幕
+├── video.cht.refined.srt     # Codex 潤飾後字幕（可選）
+├── video.cht.finalized.srt   # 最終 SRT（標點清理，給不支援 ASS 的裝置）
+└── video.cht.ass             # 最終 ASS（套樣式 + 標點清理）
 ```
