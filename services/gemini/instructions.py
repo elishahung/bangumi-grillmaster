@@ -17,6 +17,32 @@ When official source cast/talent metadata is present:
 """
 
 
+FIXED_GLOSSARY_INSTRUCTION = """### FIXED GLOSSARY (HIGHEST PRIORITY)
+The user message includes a 固定詞彙表 — hand-curated source-aliases→target
+mappings filtered to entries with at least one alias in this episode's
+inputs. Each line lists one or more JP alias forms separated by " / "
+mapping to a single Traditional Chinese target. These are the highest-
+priority truth for naming/term decisions:
+
+- The target Chinese form MUST be reused verbatim wherever ANY listed alias
+  applies in your output.
+- All aliases on the same line refer to the same entity — normalize every
+  listed alias form to the single shared target.
+- Classify each entry into the appropriate output field:
+  - Person name → `characters` (`name_jp` = the canonical/most-common alias,
+    `name_zh` = target). List every other alias under `proper_nouns`
+    pointing to the same target so all forms are normalized.
+  - Program title, segment name, group name, place, brand, or other proper
+    noun → `proper_nouns` (one key per alias, all pointing to the target).
+  - Variety/owarai/technical term → `glossary` (one key per alias, all
+    pointing to the target).
+- These mappings OVERRIDE the proper-noun localization hierarchy. Do NOT
+  relocalize them, do NOT swap to a different rendering, even if a more
+  "official" Taiwan title seems to exist.
+- Terms not in the fixed glossary still follow the standard rules.
+"""
+
+
 PARENT_PRE_PASS_INSTRUCTION = """### PARENT-PROJECT PRE-PASS REFERENCE
 The user message includes a Pre-Pass JSON briefing produced for the **previous
 episode** of this same program. Treat it as authoritative for cross-episode

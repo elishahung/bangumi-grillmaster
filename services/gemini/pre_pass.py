@@ -13,7 +13,9 @@ from services.srt import SrtBlock
 from .assets import media_refs_to_parts, prepare_pre_pass_media_assets
 from .cost import calculate_cost
 from .errors import PrePassError
+from .fixed_glossary import filter_fixed_glossary, load_fixed_glossary
 from .instructions import (
+    FIXED_GLOSSARY_INSTRUCTION,
     OFFICIAL_SOURCE_METADATA_INSTRUCTION,
     PARENT_PRE_PASS_INSTRUCTION,
     pre_pass_instruction,
@@ -52,6 +54,7 @@ def _build_user_message(
     video_description: str | None,
     source_metadata_context: str | None,
     parent_pre_pass_context: str | None,
+    fixed_glossary_pairs: list[tuple[list[str], str]],
     srt_text: str,
     chunks: list[list[SrtBlock]],
     frame_timestamps: list[float],
@@ -69,6 +72,15 @@ def _build_user_message(
         parts.append(
             "\n【上集 Pre-Pass JSON（請延續命名與術語一致性）】\n"
             f"{parent_pre_pass_context}"
+        )
+    if fixed_glossary_pairs:
+        glossary_lines = "\n".join(
+            f"- {' / '.join(aliases)} → {zh}"
+            for aliases, zh in fixed_glossary_pairs
+        )
+        parts.append(
+            "\n【固定詞彙表（最高優先級，必須採用；同一行的多個別名需全部正規化為同一目標）】\n"
+            + glossary_lines
         )
     parts.append(
         "\n【Chunk 邊界】下游會將字幕切成以下 index 區間平行翻譯，請為每段輸出一個 segment_summary："
@@ -111,10 +123,26 @@ async def run_pre_pass(
     frame_timestamps = [
         frame.timestamp_seconds for frame in pre_pass_assets.frames
     ]
+    fixed_glossary_pairs = filter_fixed_glossary(
+        load_fixed_glossary(),
+        video_description,
+        srt_text,
+        source_metadata_context,
+        parent_pre_pass_context,
+    )
+    if fixed_glossary_pairs:
+        logger.info(
+            f"[pre-pass] Fixed glossary matched {len(fixed_glossary_pairs)} entries: "
+            + ", ".join(
+                f"{'/'.join(aliases)}→{zh}"
+                for aliases, zh in fixed_glossary_pairs
+            )
+        )
     user_message = _build_user_message(
         video_description,
         source_metadata_context,
         parent_pre_pass_context,
+        fixed_glossary_pairs,
         srt_text,
         chunks,
         frame_timestamps,
@@ -122,6 +150,8 @@ async def run_pre_pass(
     system_instruction = pre_pass_instruction
     if source_metadata_context:
         system_instruction += f"\n\n{OFFICIAL_SOURCE_METADATA_INSTRUCTION}"
+    if fixed_glossary_pairs:
+        system_instruction += f"\n\n{FIXED_GLOSSARY_INSTRUCTION}"
     if parent_pre_pass_context:
         system_instruction += f"\n\n{PARENT_PRE_PASS_INSTRUCTION}"
     thinking_level = genai.types.ThinkingLevel[settings.gemini_thinking_level]
