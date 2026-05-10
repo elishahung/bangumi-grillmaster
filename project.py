@@ -25,6 +25,7 @@ ASR_FILE_NAME = "asr.json"
 SRT_FILE_NAME = "video.ja.srt"
 TRANSLATED_FILE_NAME = "video.cht.srt"
 REFINED_SRT_FILE_NAME = "video.cht.refined.srt"
+FORMATTED_SRT_FILE_NAME = "video.cht.formatted.srt"
 ASS_FILE_NAME = "video.cht.ass"
 POSTER_FILE_NAME = "poster.jpg"
 POSTER_COVER_FILE_NAME = "poster.cover.png"
@@ -526,6 +527,15 @@ class Project(BaseModel):
     def refined_srt_path(self) -> Path:
         """Get the path to the Codex-refined Traditional Chinese SRT file."""
         return self.project_path / REFINED_SRT_FILE_NAME
+
+    @property
+    def formatted_srt_path(self) -> Path:
+        """Path to the cleaned, player-friendly SRT (Netflix TC punctuation rules).
+
+        Generated alongside the ASS during the convert stage so devices that
+        don't support ASS can still consume the same cleaned subtitles.
+        """
+        return self.project_path / FORMATTED_SRT_FILE_NAME
 
     @property
     def poster_path(self) -> Path:

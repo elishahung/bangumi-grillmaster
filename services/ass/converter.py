@@ -6,11 +6,15 @@ Netflix TC style guide:
 - Strip leading/trailing ``，``/``、``/``；``/``。`` plus surrounding
   whitespace from each line (Netflix forbids terminal commas/periods at
   line endings).
-- Normalize half-width ``...`` (3+ dots) to full-width ``…``.
+- Collapse any run of ellipsis characters — 3+ half-width ``.``, one or
+  more full-width ``…``, or a mixed sequence — into a single ``…``.
+- Strip ``[\\s，、；。]+`` immediately before a closing dialogue quote
+  ``」`` or ``』`` (same rule as line edges, applied to the dialogue's
+  inner end). ``？``/``！``/``…`` before the quote are preserved.
 - Convert any remaining (mid-line) ``。`` to ``，`` for smoother visual
   flow — bare ``。`` mid-subtitle reads awkwardly.
 - Preserve mid-sentence ``，``/``、``/``；`` and all other punctuation
-  (``？``/``！``/``「」``/``『』``/``（）``/``《》``/``……``/``：``).
+  (``？``/``！``/``「」``/``『』``/``（）``/``《》``/``：``).
 """
 
 import re
@@ -19,7 +23,7 @@ from typing import Iterable
 
 from loguru import logger
 
-from services.gemini.chunker import SrtBlock, parse_srt
+from services.gemini.chunker import SrtBlock, parse_srt, serialize_srt
 
 ASS_HEADER = """[Script Info]
 ScriptType: v4.00+
@@ -38,7 +42,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
 _LINE_EDGE_PUNCT = re.compile(r"^[\s，、；。]+|[\s，、；。]+$")
-_HALF_ELLIPSIS = re.compile(r"\.{3,}")
+_ELLIPSIS_RUN = re.compile(r"(?:\.{3,}|…)+")
+_QUOTE_TAIL_PUNCT = re.compile(r"[\s，、；。]+(?=[」』])")
 _SRT_TIMECODE = re.compile(
     r"^\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*"
     r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*$"
@@ -47,7 +52,8 @@ _SRT_TIMECODE = re.compile(
 
 def _clean_line(line: str) -> str:
     line = _LINE_EDGE_PUNCT.sub("", line)
-    line = _HALF_ELLIPSIS.sub("…", line)
+    line = _ELLIPSIS_RUN.sub("…", line)
+    line = _QUOTE_TAIL_PUNCT.sub("", line)
     return line.replace("。", "，")
 
 
@@ -83,8 +89,14 @@ def _render(blocks: Iterable[SrtBlock]) -> str:
 def convert_file(
     input_path: str | Path,
     output_path: str | Path,
+    formatted_srt_path: str | Path | None = None,
 ) -> None:
-    """Read an SRT file, clean Chinese punctuation, and write a styled ASS file."""
+    """Read an SRT file, clean Chinese punctuation, and write a styled ASS file.
+
+    When ``formatted_srt_path`` is provided, also writes a player-friendly SRT
+    with the same punctuation cleanup applied to each block's text. The SRT
+    output is intended for devices that don't support ASS.
+    """
     input_path = Path(input_path)
     output_path = Path(output_path)
 
@@ -95,3 +107,12 @@ def convert_file(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(ass_text, encoding="utf-8")
     logger.success(f"Converted SRT to ASS: {output_path}")
+
+    if formatted_srt_path is not None:
+        srt_out = Path(formatted_srt_path)
+        cleaned_blocks = [
+            b.model_copy(update={"text": _clean_text(b.text)}) for b in blocks
+        ]
+        srt_out.parent.mkdir(parents=True, exist_ok=True)
+        srt_out.write_text(serialize_srt(cleaned_blocks), encoding="utf-8")
+        logger.success(f"Wrote formatted SRT: {srt_out}")

@@ -311,7 +311,11 @@ def process_project(
                 if project.refined_srt_path.exists()
                 else project.translated_path
             )
-            convert_srt_to_ass(srt_source, project.ass_path)
+            convert_srt_to_ass(
+                srt_source,
+                project.ass_path,
+                formatted_srt_path=project.formatted_srt_path,
+            )
             project.mark_progress(ProgressStage.ASS_CONVERTED)
             logger.success("Stage complete: ASS generated")
         else:

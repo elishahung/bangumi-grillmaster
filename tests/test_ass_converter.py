@@ -42,19 +42,55 @@ class AssConverterTextCleaningTests(unittest.TestCase):
         # 4+ half-width dots also collapse into a single …
         self.assertEqual(_clean_text("等等....再說"), "等等…再說")
 
-    def test_preserves_fullwidth_ellipsis(self):
-        # Existing …… is full-width and must stay untouched.
-        self.assertEqual(_clean_text("好啊……"), "好啊……")
+    def test_collapses_consecutive_fullwidth_ellipsis(self):
+        # 2+ full-width … collapse into a single …
+        self.assertEqual(_clean_text("好啊……"), "好啊…")
+        self.assertEqual(_clean_text("等等………再說"), "等等…再說")
+
+    def test_collapses_mixed_ellipsis_runs(self):
+        # Mixed half-width and full-width sequences collapse into a single …
+        self.assertEqual(_clean_text("混雜...…再說"), "混雜…再說")
+        self.assertEqual(_clean_text("混雜…...再說"), "混雜…再說")
+
+    def test_preserves_single_fullwidth_ellipsis(self):
+        # A lone … is already minimal; do not touch it.
+        self.assertEqual(_clean_text("好啊…"), "好啊…")
 
     def test_preserves_question_and_exclamation(self):
         self.assertEqual(_clean_text("真的嗎？太好了！"), "真的嗎？太好了！")
 
     def test_preserves_quotes_parens_ellipsis_colon(self):
+        # Inside-quote `…` is preserved; trailing `……` collapses to a single `…`.
         self.assertEqual(
             _clean_text("「結論：很好吃……」"),
-            "「結論：很好吃……」",
+            "「結論：很好吃…」",
         )
         self.assertEqual(_clean_text("（旁白）"), "（旁白）")
+
+    def test_strips_terminal_punct_inside_single_quotes(self):
+        self.assertEqual(_clean_text("「沒問題。」"), "「沒問題」")
+        self.assertEqual(_clean_text("「閃到腰，」"), "「閃到腰」")
+        # Question mark / exclamation before 」 must be preserved.
+        self.assertEqual(_clean_text("「怎麼啦？」"), "「怎麼啦？」")
+        self.assertEqual(_clean_text("「太好了！」"), "「太好了！」")
+        # Mid-quote ， / 、 / ； are preserved; only the tail is stripped.
+        self.assertEqual(
+            _clean_text("結果他說：「好，沒問題，站起來。」"),
+            "結果他說：「好，沒問題，站起來」",
+        )
+
+    def test_strips_terminal_punct_inside_nested_quotes(self):
+        # 『 』 (nested quote) follows the same rule.
+        self.assertEqual(_clean_text("『嵌套。』"), "『嵌套』")
+        self.assertEqual(_clean_text("『嵌套？』"), "『嵌套？』")
+
+    def test_strips_terminal_punct_inside_quotes_across_lines(self):
+        # Line 1's trailing ， is removed by _LINE_EDGE_PUNCT;
+        # line 2's 。 before 」 is removed by _QUOTE_TAIL_PUNCT.
+        self.assertEqual(
+            _clean_text("「閃到腰，\n痛得要命。」"),
+            "「閃到腰\n痛得要命」",
+        )
 
     def test_strips_leading_and_trailing_terminal_punctuation(self):
         # Trailing ， at line end is removed.
@@ -179,6 +215,80 @@ class AssConvertFileTests(unittest.TestCase):
 
         convert_file(srt_path, ass_path)
         self.assertTrue(ass_path.exists())
+
+    def test_convert_file_writes_formatted_srt_when_path_given(self):
+        tmp = self._make_temp_dir()
+        srt_path = tmp / "input.srt"
+        ass_path = tmp / "output.ass"
+        formatted_path = tmp / "output.formatted.srt"
+
+        srt_path.write_text(
+            "1\n"
+            "00:00:01,000 --> 00:00:02,000\n"
+            "「沒問題。」\n"
+            "\n"
+            "2\n"
+            "00:00:03,500 --> 00:00:05,250\n"
+            "今晚的嘉賓是……\n"
+            "\n"
+            "3\n"
+            "00:00:06,000 --> 00:00:08,000\n"
+            "真的嗎？太好了！\n",
+            encoding="utf-8",
+        )
+
+        convert_file(srt_path, ass_path, formatted_srt_path=formatted_path)
+
+        self.assertTrue(ass_path.exists())
+        self.assertTrue(formatted_path.exists())
+
+        out = formatted_path.read_text(encoding="utf-8")
+        # Standard SRT structure: index, timecode, text, blank-line separator,
+        # trailing newline.
+        self.assertEqual(
+            out,
+            "1\n"
+            "00:00:01,000 --> 00:00:02,000\n"
+            "「沒問題」\n"
+            "\n"
+            "2\n"
+            "00:00:03,500 --> 00:00:05,250\n"
+            "今晚的嘉賓是…\n"
+            "\n"
+            "3\n"
+            "00:00:06,000 --> 00:00:08,000\n"
+            "真的嗎？太好了！\n",
+        )
+
+    def test_convert_file_skips_formatted_srt_by_default(self):
+        tmp = self._make_temp_dir()
+        srt_path = tmp / "input.srt"
+        ass_path = tmp / "output.ass"
+        formatted_path = tmp / "output.formatted.srt"
+
+        srt_path.write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\n你好。\n",
+            encoding="utf-8",
+        )
+
+        convert_file(srt_path, ass_path)
+
+        self.assertTrue(ass_path.exists())
+        self.assertFalse(formatted_path.exists())
+
+    def test_convert_file_creates_formatted_srt_parent_directory(self):
+        tmp = self._make_temp_dir()
+        srt_path = tmp / "input.srt"
+        ass_path = tmp / "output.ass"
+        formatted_path = tmp / "nested" / "deep" / "out.formatted.srt"
+
+        srt_path.write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\n你好。\n",
+            encoding="utf-8",
+        )
+
+        convert_file(srt_path, ass_path, formatted_srt_path=formatted_path)
+        self.assertTrue(formatted_path.exists())
 
 
 if __name__ == "__main__":
