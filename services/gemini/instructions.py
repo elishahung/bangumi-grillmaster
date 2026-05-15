@@ -43,6 +43,37 @@ priority truth for naming/term decisions:
 """
 
 
+FIXED_GLOSSARY_FULL_INSTRUCTION = """### FIXED GLOSSARY (REFERENCE TABLE — HIGHEST PRIORITY WHEN APPLICABLE)
+The user message includes a 固定詞彙表 — the COMPLETE hand-curated
+source-aliases→target mapping (NOT filtered to this episode). Each line lists
+one or more JP alias forms separated by " / " mapping to one Traditional
+Chinese target.
+
+- Treat this as a reference table, not a list of terms that all appear.
+- A mapping applies ONLY when one of its aliases actually occurs in this
+  episode's SRT/audio/images — allowing for ASR mishearing, kana/kanji
+  script differences, long-vowel/small-kana spelling drift, and
+  full/half-width variation (e.g. ASR "クーマイメテオ" for "空前メテオ",
+  "ノンデコルテ" for "ドンデコルテ", "滝野ルイ" for "タキノルイ").
+- When a mapping applies, its Traditional Chinese target MUST be reused
+  verbatim wherever any of its alias forms (or a clear ASR-garbled form of
+  one) appears. All aliases on a line refer to the same entity.
+- Do NOT force-apply an entry whose name does not actually appear; entries
+  with no occurrence in this episode MUST be ignored entirely.
+- Beware false friends: only apply an entry when context confirms it is the
+  same entity (e.g. do NOT map a generic "パラパラ" to "パロパロ" unless
+  context clearly indicates the act).
+- Classify each APPLIED entry into the appropriate output field:
+  - Person name → `characters` (`name_jp` = canonical alias, `name_zh` =
+    target); list other appearing aliases under `proper_nouns` → same target.
+  - Program/segment/group/place/brand/proper noun → `proper_nouns`
+    (one key per appearing alias form, all → target).
+  - Variety/owarai/technical term → `glossary` (one key per appearing alias).
+- Applied mappings OVERRIDE the proper-noun localization hierarchy. Do NOT
+  relocalize or re-render them. Terms not in the table follow standard rules.
+"""
+
+
 PARENT_PRE_PASS_INSTRUCTION = """### PARENT-PROJECT PRE-PASS REFERENCE
 The user message includes a Pre-Pass JSON briefing produced for the **previous
 episode** of this same program. Treat it as authoritative for cross-episode

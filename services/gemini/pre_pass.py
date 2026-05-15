@@ -15,6 +15,7 @@ from .cost import calculate_cost
 from .errors import PrePassError
 from .fixed_glossary import filter_fixed_glossary, load_fixed_glossary
 from .instructions import (
+    FIXED_GLOSSARY_FULL_INSTRUCTION,
     FIXED_GLOSSARY_INSTRUCTION,
     OFFICIAL_SOURCE_METADATA_INSTRUCTION,
     PARENT_PRE_PASS_INSTRUCTION,
@@ -55,6 +56,7 @@ def _build_user_message(
     source_metadata_context: str | None,
     parent_pre_pass_context: str | None,
     fixed_glossary_pairs: list[tuple[list[str], str]],
+    fixed_glossary_full: bool,
     srt_text: str,
     chunks: list[list[SrtBlock]],
     frame_timestamps: list[float],
@@ -78,10 +80,13 @@ def _build_user_message(
             f"- {' / '.join(aliases)} → {zh}"
             for aliases, zh in fixed_glossary_pairs
         )
-        parts.append(
-            "\n【固定詞彙表（最高優先級，必須採用；同一行的多個別名需全部正規化為同一目標）】\n"
-            + glossary_lines
+        glossary_header = (
+            "\n【固定詞彙表（完整參照表，未過濾；僅在該名稱實際出現時才套用，"
+            "容許 ASR 誤聽，未出現者忽略）】\n"
+            if fixed_glossary_full
+            else "\n【固定詞彙表（最高優先級，必須採用；同一行的多個別名需全部正規化為同一目標）】\n"
         )
+        parts.append(glossary_header + glossary_lines)
     parts.append(
         "\n【Chunk 邊界】下游會將字幕切成以下 index 區間平行翻譯，請為每段輸出一個 segment_summary："
         f"\n{json.dumps(boundaries, ensure_ascii=False)}"
@@ -123,26 +128,36 @@ async def run_pre_pass(
     frame_timestamps = [
         frame.timestamp_seconds for frame in pre_pass_assets.frames
     ]
-    fixed_glossary_pairs = filter_fixed_glossary(
-        load_fixed_glossary(),
-        video_description,
-        srt_text,
-        source_metadata_context,
-        parent_pre_pass_context,
-    )
-    if fixed_glossary_pairs:
-        logger.info(
-            f"[pre-pass] Fixed glossary matched {len(fixed_glossary_pairs)} entries: "
-            + ", ".join(
-                f"{'/'.join(aliases)}→{zh}"
-                for aliases, zh in fixed_glossary_pairs
+    fixed_glossary_full = settings.enable_full_fixed_glossary
+    if fixed_glossary_full:
+        fixed_glossary_pairs = load_fixed_glossary()
+        if fixed_glossary_pairs:
+            logger.info(
+                f"[pre-pass] Fixed glossary: full mode, "
+                f"{len(fixed_glossary_pairs)} entries injected"
             )
+    else:
+        fixed_glossary_pairs = filter_fixed_glossary(
+            load_fixed_glossary(),
+            video_description,
+            srt_text,
+            source_metadata_context,
+            parent_pre_pass_context,
         )
+        if fixed_glossary_pairs:
+            logger.info(
+                f"[pre-pass] Fixed glossary matched {len(fixed_glossary_pairs)} entries: "
+                + ", ".join(
+                    f"{'/'.join(aliases)}→{zh}"
+                    for aliases, zh in fixed_glossary_pairs
+                )
+            )
     user_message = _build_user_message(
         video_description,
         source_metadata_context,
         parent_pre_pass_context,
         fixed_glossary_pairs,
+        fixed_glossary_full,
         srt_text,
         chunks,
         frame_timestamps,
@@ -151,7 +166,11 @@ async def run_pre_pass(
     if source_metadata_context:
         system_instruction += f"\n\n{OFFICIAL_SOURCE_METADATA_INSTRUCTION}"
     if fixed_glossary_pairs:
-        system_instruction += f"\n\n{FIXED_GLOSSARY_INSTRUCTION}"
+        system_instruction += (
+            f"\n\n{FIXED_GLOSSARY_FULL_INSTRUCTION}"
+            if fixed_glossary_full
+            else f"\n\n{FIXED_GLOSSARY_INSTRUCTION}"
+        )
     if parent_pre_pass_context:
         system_instruction += f"\n\n{PARENT_PRE_PASS_INSTRUCTION}"
     thinking_level = genai.types.ThinkingLevel[settings.gemini_thinking_level]

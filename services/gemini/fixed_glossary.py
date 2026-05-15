@@ -1,6 +1,7 @@
 """Hand-curated jp-aliases→zh fixed glossary, filtered to per-episode matches."""
 
 import json
+import unicodedata
 from pathlib import Path
 
 from loguru import logger
@@ -59,20 +60,50 @@ def load_fixed_glossary() -> list[FixedGlossaryEntry]:
     return entries
 
 
+_KANA_SHIFT = 0x60  # Katakana U+30A1..U+30F6 -> Hiragana by subtracting 0x60
+_STRIP_CHARS = str.maketrans(
+    "", "", "ー〜～・･ 　\t\n!！?？.。,、:：/／「」『』()（）"
+)
+
+
+def _normalize_jp(text: str) -> str:
+    """Fold script/width/space/punctuation so ASR variants match curated aliases.
+
+    NFKC alone does NOT fold katakana<->hiragana, so an explicit kana fold is
+    applied after it. Deliberately NOT phonetic: it does not equate the
+    long-vowel mark with small-vowel variants. Lossy phonetic folding is
+    false-positive-prone and is the "full" mode's responsibility, not this
+    deterministic filter's.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = "".join(
+        chr(ord(c) - _KANA_SHIFT) if "ァ" <= c <= "ヶ" else c for c in text
+    )
+    return text.translate(_STRIP_CHARS).casefold()
+
+
 def filter_fixed_glossary(
     entries: list[FixedGlossaryEntry], *texts: str | None
 ) -> list[FixedGlossaryEntry]:
     """Return entries where at least one JP alias appears in any of the texts.
 
-    Substring match (Japanese has no word boundaries). All aliases of a
-    matched entry are preserved so the downstream LLM can normalize every
-    listed alias form to the single ZH target.
+    Normalized substring match (Japanese has no word boundaries): both the
+    haystack and each alias are passed through `_normalize_jp` so script/width/
+    space/punctuation drift in ASR output still matches curated aliases. All
+    aliases of a matched entry are preserved so the downstream LLM can
+    normalize every listed alias form to the single ZH target.
     """
     haystack = "\n".join(t for t in texts if t)
     if not haystack or not entries:
         return []
+    norm_haystack = _normalize_jp(haystack)
     matched: list[FixedGlossaryEntry] = []
     for aliases, zh in entries:
-        if any(alias in haystack for alias in aliases):
+        # The truthiness guard stops an alias that normalizes to "" (e.g. an
+        # all-punctuation alias) from matching every haystack via empty substr.
+        if any(
+            (norm_alias := _normalize_jp(alias)) and norm_alias in norm_haystack
+            for alias in aliases
+        ):
             matched.append((list(aliases), zh))
     return matched

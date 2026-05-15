@@ -140,6 +140,7 @@ GEMINI_CHUNK_MAX_RETRIES=3             # chunk 失敗重試次數
 GEMINI_CHUNK_FRAME_INTERVAL_SECONDS=30 # chunk 圖片抽樣頻率（每幾秒一張，另外固定包含每段首尾幀）
 GEMINI_CHUNK_FRAME_MAX_SIDE=768        # chunk 圖片最長邊尺寸
 GEMINI_CHUNK_MISSING_BLOCK_TOLERANCE=2 # 每塊允許未對齊/缺漏字幕區塊數上限
+ENABLE_FULL_FIXED_GLOSSARY=false       # 固定譯名表整份帶入 pre-pass（false=只帶比對到的）
 
 # 可選：Codex 後處理（需安裝 Codex CLI）
 ENABLE_SRT_REFINE=true             # 翻譯後再用 Codex 潤飾繁中字幕

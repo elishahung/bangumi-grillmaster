@@ -73,6 +73,10 @@ class Settings(BaseSettings):
         default=3.0,
         description="Skip the first N seconds of video when sampling reference frames (avoids TV station intro/logo frames). Applies to pre-pass and the first chunk only.",
     )
+    enable_full_fixed_glossary: bool = Field(
+        default=False,
+        description="Pre-pass fixed glossary injection mode. False = normalized substring pre-filter (only matched entries injected). True = inject the entire glossary as a reference table and let the model resolve matches.",
+    )
 
     # --- Translation: structural fix (DeepSeek, non-Gemini) ------------------
     deepseek_api_key: str = Field(
