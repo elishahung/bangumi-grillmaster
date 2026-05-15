@@ -1,13 +1,16 @@
+import json
 import shutil
 import unittest
 from pathlib import Path
 
-from services.finalize.subtitles import (
+from services.finalize.finalize import (
     ASS_HEADER,
     _block_to_dialogue,
+    _build_latin_name_spacer,
     _clean_text,
+    _load_latin_name_units,
     _srt_timecode_to_ass,
-    convert_file,
+    finalize_and_export,
 )
 from services.srt import SrtBlock
 
@@ -114,6 +117,23 @@ class AssConverterTextCleaningTests(unittest.TestCase):
             "第一行\n第二行",
         )
 
+    def test_collapses_speaker_dash_space(self):
+        # Netflix TC TTSG: speaker hyphen has NO space after it.
+        self.assertEqual(_clean_text("- 晚安"), "-晚安")
+        self.assertEqual(_clean_text("-  晚安"), "-晚安")
+        self.assertEqual(_clean_text("-\t晚安"), "-晚安")
+        self.assertEqual(
+            _clean_text("- 晚安\n- 這裡是大家"), "-晚安\n-這裡是大家"
+        )
+        # Leading whitespace before the dash is stripped first, then collapsed.
+        self.assertEqual(_clean_text(" - 晚安"), "-晚安")
+
+    def test_leaves_compliant_and_interruption_dashes(self):
+        # Already compliant (no space) → unchanged.
+        self.assertEqual(_clean_text("-是 Shampoo"), "-是 Shampoo")
+        # "--" interruption marker must NOT be collapsed.
+        self.assertEqual(_clean_text("-- 等一下"), "-- 等一下")
+
 
 class AssTimecodeTests(unittest.TestCase):
     def test_converts_srt_timecode_to_ass_pair(self):
@@ -197,7 +217,7 @@ class AssConvertFileTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        convert_file(srt_path, ass_path)
+        finalize_and_export(srt_path, ass_path)
 
         out = ass_path.read_text(encoding="utf-8")
         self.assertTrue(out.startswith(ASS_HEADER))
@@ -223,7 +243,7 @@ class AssConvertFileTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        convert_file(srt_path, ass_path)
+        finalize_and_export(srt_path, ass_path)
         self.assertTrue(ass_path.exists())
 
     def test_convert_file_writes_finalized_srt_when_path_given(self):
@@ -247,7 +267,7 @@ class AssConvertFileTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        convert_file(srt_path, ass_path, finalized_srt_path=finalized_path)
+        finalize_and_export(srt_path, ass_path, finalized_srt_path=finalized_path)
 
         self.assertTrue(ass_path.exists())
         self.assertTrue(finalized_path.exists())
@@ -281,7 +301,7 @@ class AssConvertFileTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        convert_file(srt_path, ass_path)
+        finalize_and_export(srt_path, ass_path)
 
         self.assertTrue(ass_path.exists())
         self.assertFalse(finalized_path.exists())
@@ -297,8 +317,222 @@ class AssConvertFileTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        convert_file(srt_path, ass_path, finalized_srt_path=finalized_path)
+        finalize_and_export(srt_path, ass_path, finalized_srt_path=finalized_path)
         self.assertTrue(finalized_path.exists())
+
+
+def _sp(text: str, units) -> str:
+    return _build_latin_name_spacer(units)(text)
+
+
+class LatinNameSpacingTests(unittest.TestCase):
+    def test_spaces_mixed_unit_against_han(self):
+        self.assertEqual(
+            _sp("以及空前Meteor的茶屋。", ["空前Meteor"]),
+            "以及 空前Meteor 的茶屋。",
+        )
+
+    def test_preserves_mapping_internal_spaces(self):
+        self.assertEqual(
+            _sp("他是Long Coat Daddy啦", ["Long Coat Daddy"]),
+            "他是 Long Coat Daddy 啦",
+        )
+
+    def test_no_space_against_punctuation(self):
+        self.assertEqual(_sp("是Diane。", ["Diane"]), "是 Diane。")
+        self.assertEqual(_sp("是Diane.", ["Diane"]), "是 Diane.")
+        self.assertEqual(
+            _sp("那是水川Katamari？", ["水川Katamari"]),
+            "那是 水川Katamari？",
+        )
+
+    def test_no_padding_at_line_edges(self):
+        self.assertEqual(
+            _sp("Diane 的 Yusuke。", ["Diane", "Yusuke"]),
+            "Diane 的 Yusuke。",
+        )
+        self.assertEqual(
+            _sp("那是水川Katamari", ["水川Katamari"]),
+            "那是 水川Katamari",
+        )
+
+    def test_collapses_existing_extra_spaces(self):
+        self.assertEqual(
+            _sp("原田竟然比  水川Katamari  還心動", ["水川Katamari"]),
+            "原田竟然比 水川Katamari 還心動",
+        )
+
+    def test_pure_han_name_is_never_spaced(self):
+        # Point 2: pure Han/kana names contain no Latin, so they are not
+        # candidate units and must never get spaced (`森本 桑` regression).
+        self.assertEqual(
+            _sp("難道是森本桑？", ["森本", "Diane"]), "難道是森本桑？"
+        )
+        self.assertEqual(
+            _sp("永野以前說過", ["永野"]), "永野以前說過"
+        )
+
+    def test_per_line_and_second_line_start(self):
+        self.assertEqual(
+            _sp("原田竟然比\n水川Katamari還讓人心動？", ["水川Katamari"]),
+            "原田竟然比\n水川Katamari 還讓人心動？",
+        )
+
+    def test_no_units_is_identity(self):
+        self.assertEqual(
+            _sp("以及空前Meteor的茶屋。", []),
+            "以及空前Meteor的茶屋。",
+        )
+
+    def test_longest_unit_wins(self):
+        units = ["Diane", "Diane津田"]
+        self.assertEqual(_sp("是Diane津田。", units), "是 Diane津田。")
+        self.assertEqual(_sp("是Diane的。", units), "是 Diane 的。")
+
+    def test_repairs_internally_split_mixed_unit(self):
+        # LLM wrongly split the unit; finalizer must rejoin to canonical.
+        self.assertEqual(
+            _sp("他是金屬 Bat的", ["金屬Bat"]), "他是 金屬Bat 的"
+        )
+        self.assertEqual(
+            _sp("Imadei 醬很強", ["Imadei醬"]), "Imadei醬 很強"
+        )
+        self.assertEqual(
+            _sp("他是金屬  Bat", ["金屬Bat"]), "他是 金屬Bat"
+        )
+
+    def test_repairs_mangled_spaces_in_multiword_unit(self):
+        self.assertEqual(
+            _sp("這是Long  Coat Daddy真強", ["Long Coat Daddy"]),
+            "這是 Long Coat Daddy 真強",
+        )
+        # LLM removed the intended internal spaces → restore canonical form.
+        self.assertEqual(
+            _sp("這是LongCoatDaddy真強", ["Long Coat Daddy"]),
+            "這是 Long Coat Daddy 真強",
+        )
+
+    def test_preserves_separator_between_adjacent_romanized_names(self):
+        # Regression: group + member, both romanized, only a space between
+        # them — the separator must NOT be eaten (`Two TribeTakanori` bug).
+        units = ["Two Tribe", "Takanori"]
+        self.assertEqual(
+            _sp("上一屆王者 Two Tribe Takanori", units),
+            "上一屆王者 Two Tribe Takanori",
+        )
+        self.assertEqual(
+            _sp("Two Tribe Takanori 很強", units),
+            "Two Tribe Takanori 很強",
+        )
+        self.assertEqual(
+            _sp("這是 Two Tribe Takanori。", units),
+            "這是 Two Tribe Takanori。",
+        )
+
+    def test_does_not_merge_across_real_text(self):
+        # Only whitespace is tolerated inside a unit; a real char between the
+        # parts must NOT be absorbed (no false merge).
+        self.assertEqual(
+            _sp("金屬是Bat嗎", ["金屬Bat"]), "金屬是Bat嗎"
+        )
+
+
+class LoadLatinNameUnitsTests(unittest.TestCase):
+    def _write(self, obj) -> Path:
+        base = Path(__file__).resolve().parents[1] / "tmp_test_artifacts"
+        base.mkdir(parents=True, exist_ok=True)
+        path = base / "tmp_prepass.json"
+        path.write_text(
+            json.dumps(obj, ensure_ascii=False), encoding="utf-8"
+        )
+        self.addCleanup(lambda: path.unlink(missing_ok=True))
+        return path
+
+    def test_collects_proper_nouns_characters_glossary(self):
+        path = self._write(
+            {
+                "proper_nouns": {"クーマイメテオ": "空前Meteor", "茶屋": "茶屋"},
+                "characters": [{"name_jp": "嶋佐", "name_zh": "嶋佐和也"}],
+                "glossary": {"ボケ": "裝傻"},
+            }
+        )
+        self.assertEqual(
+            set(_load_latin_name_units(path)),
+            {"空前Meteor", "茶屋", "嶋佐和也", "裝傻"},
+        )
+
+    def test_none_and_missing_and_garbled_return_empty(self):
+        self.assertEqual(_load_latin_name_units(None), [])
+        self.assertEqual(
+            _load_latin_name_units(Path("nonexistent_xyz.json")), []
+        )
+        bad = self._write([])  # list, not dict → degrade safely
+        self.assertEqual(_load_latin_name_units(bad), [])
+
+
+class LatinNameSpacingConvertFileTests(unittest.TestCase):
+    def _make_temp_dir(self) -> Path:
+        base = Path(__file__).resolve().parents[1] / "tmp_test_artifacts"
+        base.mkdir(parents=True, exist_ok=True)
+        path = base / "tmp_spacing_convert"
+        shutil.rmtree(path, ignore_errors=True)
+        path.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(path, ignore_errors=True))
+        return path
+
+    def test_finalize_applies_spacing_and_skips_pure_han(self):
+        tmp = self._make_temp_dir()
+        srt_path = tmp / "input.srt"
+        ass_path = tmp / "out.ass"
+        fin_path = tmp / "out.finalized.srt"
+        pp_path = tmp / "pre_pass.json"
+
+        srt_path.write_text(
+            "1\n"
+            "00:00:01,000 --> 00:00:02,000\n"
+            "以及空前Meteor的茶屋。\n"
+            "\n"
+            "2\n"
+            "00:00:03,000 --> 00:00:04,000\n"
+            "難道是森本桑？\n",
+            encoding="utf-8",
+        )
+        pp_path.write_text(
+            json.dumps(
+                {
+                    "proper_nouns": {"クーマイメテオ": "空前Meteor"},
+                    "characters": [
+                        {"name_jp": "森本", "name_zh": "森本", "role_note": ""}
+                    ],
+                    "glossary": {},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        finalize_and_export(
+            srt_path,
+            ass_path,
+            finalized_srt_path=fin_path,
+            pre_pass_path=pp_path,
+        )
+
+        fin = fin_path.read_text(encoding="utf-8")
+        self.assertEqual(
+            fin,
+            "1\n"
+            "00:00:01,000 --> 00:00:02,000\n"
+            "以及 空前Meteor 的茶屋\n"  # mixed unit spaced, trailing 。 cleaned
+            "\n"
+            "2\n"
+            "00:00:03,000 --> 00:00:04,000\n"
+            "難道是森本桑？\n",  # pure Han name untouched
+        )
+        ass = ass_path.read_text(encoding="utf-8")
+        self.assertIn("以及 空前Meteor 的茶屋", ass)
+        self.assertIn("難道是森本桑？", ass)
+        self.assertNotIn("森本 桑", ass)
 
 
 if __name__ == "__main__":

@@ -287,14 +287,7 @@ class Gemini:
         all_blocks: list[SrtBlock] = []
         for r in chunk_results:
             all_blocks.extend(r.blocks)
-        latin_name_units = [
-            *pre_pass_result.proper_nouns.values(),
-            *(c.name_zh for c in pre_pass_result.characters),
-            *pre_pass_result.glossary.values(),
-        ]
-        all_blocks = normalize_translated_blocks(
-            all_blocks, latin_name_units
-        )
+        all_blocks = normalize_translated_blocks(all_blocks)
         all_blocks = [
             SrtBlock(index=i, timecode=block.timecode, text=block.text)
             for i, block in enumerate(all_blocks, start=1)

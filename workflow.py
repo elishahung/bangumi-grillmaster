@@ -10,7 +10,7 @@ from pathlib import Path
 from project import Project, ProgressStage, VideoSource
 from loguru import logger
 from settings import settings
-from services.finalize import convert_file as convert_srt_to_ass
+from services.finalize import finalize_and_export
 from services.codex import generate_cover, refine_subtitles
 from services.elevenlabs import ElevenLabsASR, convert_file
 from services.gemini import Gemini, GeminiTranslationError, TranslationRequest
@@ -348,10 +348,11 @@ def process_project(
                 if project.refined_srt_path.exists()
                 else project.translated_path
             )
-            convert_srt_to_ass(
+            finalize_and_export(
                 srt_source,
                 project.ass_path,
                 finalized_srt_path=project.finalized_srt_path,
+                pre_pass_path=project.pre_pass_path,
             )
             project.mark_progress(ProgressStage.FINALIZED)
             logger.success("Stage complete: Finalized (ASS + SRT)")

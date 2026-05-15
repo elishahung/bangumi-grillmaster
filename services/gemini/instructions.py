@@ -221,10 +221,6 @@ The success criterion is natural, comedy-flavored Taiwanese variety subtitles th
 - The source SRT line breaks reflect Japanese phrasing and are advisory only. When the Chinese translation is long enough to wrap, choose break points that fit Chinese phrasing rather than mirroring the source. Don't leave a single character, mood particle (啦/喔/嘛/耶), or stray punctuation alone on the trailing line.
 - Treat Netflix-style line treatment as a readability preference, not a reason to weaken translation quality or change block structure: use at most two subtitle text lines, keep text on one line when it fits comfortably, and when there are multiple natural two-line break options, prefer a bottom-heavy pyramid shape while avoiding top lines of only one or two words.
 
-### LATIN-NAME SPACING (Netflix convention)
-A proper noun containing Latin letters — pure-Latin (`Diane`) or mixed Chinese-Latin (`水川Katamari`) — is ONE indivisible unit. Put one half-width space between that whole unit and any adjacent Han/kana character; never put a space inside the unit, but keep spaces that are part of the mapping itself (`Long Coat Daddy`). No space between the unit and adjacent punctuation, and none at a line's start or end. Do NOT space pure Han/kanji names (`鎌鼬的山內`, not `鎌鼬 的 山內`). The proper-noun mappings stay clean (no surrounding spaces) — add spacing only in the output sentence. If a line must wrap by such a name, break at the inserted boundary space, never inside the unit.
-- Good: `以及 空前Meteor 的茶屋。`  Bad: `以及空前Meteor的茶屋。` / `松井 Kemuri` / `是 Diane 。`
-
 ### DO NOT
 - Do not translate blocks outside your assigned range.
 - Do not write any intro or closing text.

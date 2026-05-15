@@ -1,11 +1,11 @@
 __all__ = [
-    "convert_file",
+    "finalize_and_export",
 ]
 
 
 def __getattr__(name: str):
-    if name == "convert_file":
-        from .subtitles import convert_file
+    if name == "finalize_and_export":
+        from .finalize import finalize_and_export
 
-        return convert_file
+        return finalize_and_export
     raise AttributeError(name)
