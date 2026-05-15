@@ -13,7 +13,7 @@ from services.srt import SrtBlock
 from .assets import media_refs_to_parts, prepare_pre_pass_media_assets
 from .cost import calculate_cost
 from .errors import PrePassError
-from .fixed_glossary import (
+from services.fixed_glossary import (
     FixedGlossary,
     filter_fixed_glossary,
     format_fixed_glossary_block,

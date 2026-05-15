@@ -25,6 +25,7 @@ from typing import Callable, Iterable
 
 from loguru import logger
 
+from services.fixed_glossary import load_fixed_glossary
 from services.srt import SrtBlock, parse_srt, serialize_srt
 
 ASS_HEADER = """[Script Info]
@@ -47,9 +48,13 @@ _LINE_EDGE_PUNCT = re.compile(r"^[\s，、；。]+|[\s，、；。]+$")
 _ELLIPSIS_RUN = re.compile(r"(?:\.{3,}|[…⋯])+")
 _QUOTE_TAIL_PUNCT = re.compile(r"[\s，、；。]+(?=[」』])")
 # Netflix Traditional Chinese (Taiwan) TTSG: two-speaker dialogue uses an
-# English hyphen with NO space after it. Collapse a leading "- " to "-".
-# A leading "--" (interruption) is left intact (second char is not space).
-_SPEAKER_DASH = re.compile(r"^-[ \t]+")
+# English hyphen with NO space after it. Normalize a leading speaker dash —
+# any hyphen/dash variant incl. full-width "－" (U+FF0D), en/em dash, minus —
+# plus surrounding spaces, to a single half-width "-". A leading "--"
+# (interruption) keeps its second dash: only the first char is matched.
+_SPEAKER_DASH = re.compile(
+    r"^[ \t　]*[-‐-―−－][ \t　]*"
+)
 _SRT_TIMECODE = re.compile(
     r"^\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*"
     r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*$"
@@ -118,6 +123,30 @@ def _load_latin_name_units(
     if isinstance(glossary, dict):
         units.extend(v for v in glossary.values() if isinstance(v, str))
     return units
+
+
+def _curated_name_units() -> list[str]:
+    """Mixed Chinese-Latin zh renderings from the bundled curated glossary.
+
+    Only names containing BOTH a Han/kana char AND a Latin letter are
+    force-added (e.g. `金屬Bat`, `水川Katamari`). These are highly
+    distinctive, so backfilling them is safe even when this episode's
+    pre_pass missed them (pre_pass often only mentions a name inside a
+    segment summary). Pure-Latin curated names (e.g. `Diane`, `THE SECOND`)
+    are deliberately NOT force-added from the whole catalog — they are
+    episode-vetted via pre_pass when relevant and far more prone to
+    coincidental substring matches. Pure-Han names never qualify (no Latin).
+    """
+    glossary = load_fixed_glossary()
+    units: list[str] = []
+    for unit in glossary.talents:
+        units.extend(zh for _, zh in unit.entries())
+    units.extend(zh for _, zh in glossary.others)
+    return [
+        zh
+        for zh in units
+        if _HAS_LATIN_RE.search(zh) and _CJK_RE.search(zh)
+    ]
 
 
 def _build_latin_name_spacer(
@@ -250,7 +279,7 @@ def finalize_and_export(
     srt_text = input_path.read_text(encoding="utf-8")
     blocks = parse_srt(srt_text)
     space_latin_names = _build_latin_name_spacer(
-        _load_latin_name_units(pre_pass_path)
+        _load_latin_name_units(pre_pass_path) + _curated_name_units()
     )
     blocks = [
         block.model_copy(update={"text": space_latin_names(block.text)})

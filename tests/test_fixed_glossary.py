@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from services.gemini.fixed_glossary import (
+from services.fixed_glossary import (
     FixedGlossary,
     TalentUnit,
     _normalize_jp,

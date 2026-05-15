@@ -8,6 +8,7 @@ from services.finalize.finalize import (
     _block_to_dialogue,
     _build_latin_name_spacer,
     _clean_text,
+    _curated_name_units,
     _load_latin_name_units,
     _srt_timecode_to_ass,
     finalize_and_export,
@@ -133,6 +134,18 @@ class AssConverterTextCleaningTests(unittest.TestCase):
         self.assertEqual(_clean_text("-是 Shampoo"), "-是 Shampoo")
         # "--" interruption marker must NOT be collapsed.
         self.assertEqual(_clean_text("-- 等一下"), "-- 等一下")
+
+    def test_normalizes_fullwidth_and_variant_speaker_dash(self):
+        # Netflix TC TTSG requires an English (half-width) hyphen.
+        self.assertEqual(
+            _clean_text("－哎呀，各位辛苦了"), "-哎呀，各位辛苦了"
+        )
+        self.assertEqual(
+            _clean_text("－哎呀\n－那是當然"), "-哎呀\n-那是當然"
+        )
+        self.assertEqual(_clean_text("－ 哎呀"), "-哎呀")
+        self.assertEqual(_clean_text("— 對啊"), "-對啊")  # em dash
+        self.assertEqual(_clean_text("–對啊"), "-對啊")  # en dash, no space
 
 
 class AssTimecodeTests(unittest.TestCase):
@@ -533,6 +546,52 @@ class LatinNameSpacingConvertFileTests(unittest.TestCase):
         self.assertIn("以及 空前Meteor 的茶屋", ass)
         self.assertIn("難道是森本桑？", ass)
         self.assertNotIn("森本 桑", ass)
+
+
+class CuratedNameUnitsTests(unittest.TestCase):
+    def test_bundled_glossary_yields_only_mixed_names(self):
+        units = _curated_name_units()
+        self.assertGreater(len(units), 5)
+        # Mixed Chinese-Latin → included.
+        self.assertIn("金屬Bat", units)
+        # Pure-Latin curated names → deliberately excluded.
+        self.assertNotIn("Diane", units)
+        self.assertNotIn("THE SECOND", units)
+        # Every returned unit is genuinely mixed.
+        for u in units:
+            self.assertRegex(u, r"[A-Za-z]")
+            self.assertRegex(u, r"[぀-ヿ一-鿿]")
+
+    def test_finalize_spaces_curated_name_without_pre_pass(self):
+        # The user's case: 金屬Bat is NOT in this episode's pre_pass, but the
+        # curated glossary makes finalize recognize and space it anyway
+        # (Latin-unit boundary spacing; the trailing 桑 keeps its space).
+        tmp = (
+            Path(__file__).resolve().parents[1]
+            / "tmp_test_artifacts"
+            / "tmp_curated_convert"
+        )
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True, exist_ok=True)
+        self.addCleanup(lambda: shutil.rmtree(tmp, ignore_errors=True))
+
+        srt_path = tmp / "in.srt"
+        fin_path = tmp / "out.finalized.srt"
+        srt_path.write_text(
+            "1\n"
+            "00:00:01,000 --> 00:00:02,000\n"
+            "我推薦的是金屬Bat 桑啊。\n",
+            encoding="utf-8",
+        )
+        finalize_and_export(
+            srt_path, tmp / "out.ass", finalized_srt_path=fin_path
+        )  # no pre_pass_path on purpose
+        self.assertEqual(
+            fin_path.read_text(encoding="utf-8"),
+            "1\n"
+            "00:00:01,000 --> 00:00:02,000\n"
+            "我推薦的是 金屬Bat 桑啊\n",
+        )
 
 
 if __name__ == "__main__":
