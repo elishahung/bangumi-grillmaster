@@ -11,7 +11,11 @@ from project import Project, ProgressStage, VideoSource
 from loguru import logger
 from settings import settings
 from services.finalize import finalize_and_export
-from services.codex import generate_cover, refine_subtitles
+from services.codex import (
+    generate_cover,
+    glossary_check_subtitles,
+    refine_subtitles,
+)
 from services.elevenlabs import ElevenLabsASR, convert_file
 from services.gemini import Gemini, GeminiTranslationError, TranslationRequest
 from services.media import MediaProcessor
@@ -30,6 +34,7 @@ def submit_project(
     break_after: ProgressStage | None = None,
     parent_project_path: str | None = None,
     enable_refine: bool = False,
+    enable_glossary_check: bool = False,
     enable_cover: bool = False,
 ) -> None:
     """Submit a new video project for processing.
@@ -48,6 +53,9 @@ def submit_project(
             for cross-episode consistency.
         enable_refine: Force-enable the optional subtitle refinement stage.
             Overrides ``settings.enable_srt_refine`` when True.
+        enable_glossary_check: Force-enable the optional fixed-glossary
+            localization check stage. Overrides
+            ``settings.enable_glossary_check`` when True.
         enable_cover: Force-enable the optional async cover image stylization.
             Overrides ``settings.enable_cover_generation`` when True. Always
             skipped when ``break_after`` is set.
@@ -68,6 +76,7 @@ def submit_project(
         new_project.id,
         break_after=break_after,
         enable_refine=enable_refine,
+        enable_glossary_check=enable_glossary_check,
         enable_cover=enable_cover,
     )
 
@@ -115,6 +124,7 @@ def process_project(
     project_id: str,
     break_after: ProgressStage | None = None,
     enable_refine: bool = False,
+    enable_glossary_check: bool = False,
     enable_cover: bool = False,
 ) -> None:
     """Process a video project through the complete captioning pipeline.
@@ -127,8 +137,9 @@ def process_project(
     5. Perform automatic speech recognition (ASR) and write source SRT
     6. Translate subtitles using Gemini
     7. Refine Traditional Chinese subtitles via Codex (optional)
-    8. Finalize: emit styled ASS + cleaned SRT from refined/translated SRT
-    9. Wait for cover image generation, then archive (optional)
+    8. Glossary-check the refined subtitles via Codex (optional)
+    9. Finalize: emit styled ASS + cleaned SRT from glossary-checked/refined/translated SRT
+    10. Wait for cover image generation, then archive (optional)
 
     Each stage is skipped if it has already been completed (idempotent).
     Progress is automatically saved after each stage.
@@ -140,6 +151,9 @@ def process_project(
             next stage.
         enable_refine: Force-enable the optional subtitle refinement stage.
             Overrides ``settings.enable_srt_refine`` when True.
+        enable_glossary_check: Force-enable the optional fixed-glossary
+            localization check stage. Overrides
+            ``settings.enable_glossary_check`` when True.
         enable_cover: Force-enable the optional async cover image stylization.
             Overrides ``settings.enable_cover_generation`` when True. Always
             skipped when ``break_after`` is set.
@@ -149,6 +163,9 @@ def process_project(
     """
     logger.info(f"Starting project processing: {project_id}")
     do_refine = enable_refine or settings.enable_srt_refine
+    do_glossary_check = (
+        enable_glossary_check or settings.enable_glossary_check
+    )
     do_cover = enable_cover or settings.enable_cover_generation
     cover_executor: ThreadPoolExecutor | None = None
     cover_future: Future | None = None
@@ -340,14 +357,35 @@ def process_project(
         else:
             logger.debug("Stage skipped: SRT refinement disabled")
 
+        # Process fixed-glossary localization check (optional)
+        if do_glossary_check:
+            if not project.is_glossary_checked:
+                logger.info(
+                    f"Stage: Glossary-checking subtitles for {project_id}"
+                )
+                glossary_check_subtitles(project)
+                project.mark_progress(ProgressStage.GLOSSARY_CHECKED)
+                logger.success("Stage complete: Subtitles glossary-checked")
+            else:
+                logger.debug(
+                    "Stage skipped: Subtitles already glossary-checked"
+                )
+            if _should_stop_after_stage(
+                project_id, break_after, ProgressStage.GLOSSARY_CHECKED
+            ):
+                return
+        else:
+            logger.debug("Stage skipped: Glossary check disabled")
+
         # Finalize: produce ASS + SRT outputs together
         if not project.is_finalized:
             logger.info(f"Stage: Finalizing subtitles for {project_id}")
-            srt_source = (
-                project.refined_srt_path
-                if project.refined_srt_path.exists()
-                else project.translated_path
-            )
+            if project.glossary_checked_srt_path.exists():
+                srt_source = project.glossary_checked_srt_path
+            elif project.refined_srt_path.exists():
+                srt_source = project.refined_srt_path
+            else:
+                srt_source = project.translated_path
             finalize_and_export(
                 srt_source,
                 project.ass_path,

@@ -128,6 +128,10 @@ class Settings(BaseSettings):
         default=False,
         description="Enable optional Codex-driven Traditional Chinese subtitle refinement stage between TRANSLATED and FINALIZED",
     )
+    enable_glossary_check: bool = Field(
+        default=False,
+        description="Enable optional Codex-driven fixed-glossary localization check stage between SRT_REFINED and FINALIZED. Independent of ENABLE_SRT_REFINE; only runs if a refined SRT exists.",
+    )
     enable_cover_generation: bool = Field(
         default=False,
         description="Enable optional Codex-driven cover image stylization (runs async after DOWNLOADED, joined before archive). Skipped entirely when break_after is set.",

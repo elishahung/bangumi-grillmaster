@@ -31,10 +31,13 @@ POSTER_FILE_NAME = "poster.jpg"
 POSTER_COVER_FILE_NAME = "poster.cover.png"
 PRE_PASS_FILE_NAME = "pre_pass.json"
 REFINE_REPORT_FILE_NAME = "report.md"
+GLOSSARY_CHECKED_SRT_FILE_NAME = "video.cht.glossary_checked.srt"
+GLOSSARY_CHECK_REPORT_FILE_NAME = "report.md"
 ASR_CACHE_DIR_NAME = ".asr"
 CHUNKS_CACHE_DIR_NAME = ".chunks"
 PRE_PASS_CACHE_DIR_NAME = ".pre_pass"
 REFINE_CACHE_DIR_NAME = ".refine"
+GLOSSARY_CHECK_CACHE_DIR_NAME = ".glossary_check"
 
 
 class ProgressStage(str, Enum):
@@ -53,6 +56,7 @@ class ProgressStage(str, Enum):
     PREPASS_COMPLETED = "is_prepass_completed"
     CHUNK_TRANSLATED = "is_chunk_translated"
     SRT_REFINED = "is_srt_refined"
+    GLOSSARY_CHECKED = "is_glossary_checked"
     FINALIZED = "is_finalized"
 
 
@@ -99,6 +103,7 @@ class Project(BaseModel):
         is_prepass_completed: Whether the Gemini pre-pass briefing has been completed.
         is_chunk_translated: Whether concurrent chunk translation has been completed.
         is_srt_refined: Whether the optional Codex-driven SRT refinement has been completed.
+        is_glossary_checked: Whether the optional Codex-driven fixed-glossary localization check has been completed.
         is_finalized: Whether the final ASS + SRT outputs have been generated.
         is_cover_generated: Whether the optional Codex-driven cover image has been generated.
     """
@@ -122,6 +127,7 @@ class Project(BaseModel):
     is_prepass_completed: bool = False
     is_chunk_translated: bool = False
     is_srt_refined: bool = False
+    is_glossary_checked: bool = False
     is_finalized: bool = False
     is_cover_generated: bool = False
 
@@ -622,6 +628,26 @@ class Project(BaseModel):
     def refine_report_path(self) -> Path:
         """Get the path to the Codex-written refinement summary report."""
         return self.refine_cache_dir / REFINE_REPORT_FILE_NAME
+
+    @property
+    def glossary_checked_srt_path(self) -> Path:
+        """Path to the Codex glossary-checked Traditional Chinese SRT file.
+
+        Produced by the optional glossary-check stage, which copies the
+        refined SRT and swaps only fixed-glossary term mismatches. May be
+        absent when the stage ran but found nothing to check.
+        """
+        return self.project_path / GLOSSARY_CHECKED_SRT_FILE_NAME
+
+    @property
+    def glossary_check_cache_dir(self) -> Path:
+        """Get the directory for glossary-check artifacts (report, etc.)."""
+        return self.project_path / GLOSSARY_CHECK_CACHE_DIR_NAME
+
+    @property
+    def glossary_check_report_path(self) -> Path:
+        """Get the path to the Codex-written glossary-check summary report."""
+        return self.glossary_check_cache_dir / GLOSSARY_CHECK_REPORT_FILE_NAME
 
 
 # Runtime check enum values match field names

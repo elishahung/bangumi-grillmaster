@@ -7,7 +7,10 @@ from pathlib import Path
 from loguru import logger
 
 from project import Project
-from services.srt import SrtBlock, parse_srt
+from ._srt_guard import (
+    parse_srt_file as _parse_srt,
+    validate_srt_against_source as _validate_refined_srt,
+)
 from .client import run_codex_exec
 
 
@@ -18,40 +21,6 @@ _PROMPT = (Path(__file__).parent / "prompts" / "refine.md").read_text(
 
 class RefinementValidationError(RuntimeError):
     """Raised when the refined SRT structurally diverges from the source."""
-
-
-def _parse_srt(path: Path) -> list[SrtBlock]:
-    # utf-8-sig tolerates a UTF-8 BOM that Codex sometimes writes.
-    raw = path.read_text(encoding="utf-8-sig").strip()
-    return parse_srt(raw) if raw else []
-
-
-def _validate_refined_srt(source: Path, refined: Path) -> list[str]:
-    src_blocks = _parse_srt(source)
-    ref_blocks = _parse_srt(refined)
-    errors: list[str] = []
-
-    if len(src_blocks) != len(ref_blocks):
-        errors.append(
-            f"block count differs: source={len(src_blocks)} refined={len(ref_blocks)}"
-        )
-
-    for position, (left, right) in enumerate(
-        zip(src_blocks, ref_blocks), start=1
-    ):
-        if left.index != right.index:
-            errors.append(
-                f"position {position}: index changed {left.index} -> {right.index}"
-            )
-        if left.timecode != right.timecode:
-            errors.append(
-                f"block {left.index}: timecode changed "
-                f"{left.timecode!r} -> {right.timecode!r}"
-            )
-        if not right.text:
-            errors.append(f"block {right.index}: refined text is empty")
-
-    return errors
 
 
 def refine_subtitles(project: Project) -> None:

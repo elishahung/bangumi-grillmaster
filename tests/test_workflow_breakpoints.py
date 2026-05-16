@@ -34,12 +34,16 @@ class WorkflowBreakpointTests(unittest.TestCase):
         project.is_prepass_completed = False
         project.is_chunk_translated = False
         project.is_srt_refined = False
+        project.is_glossary_checked = False
         project.is_cover_generated = False
         project.audio_path = Path("projects/demo/.asr/audio.opus")
         project.asr_path = Path("projects/demo/.asr/asr.json")
         project.srt_path = Path("projects/demo/video.ja.srt")
         project.translated_path = Path("projects/demo/video.cht.srt")
         project.refined_srt_path = Path("projects/demo/video.cht.refined.srt")
+        project.glossary_checked_srt_path = Path(
+            "projects/demo/video.cht.glossary_checked.srt"
+        )
         project.poster_path = Path("projects/demo/poster.jpg")
         project.poster_cover_path = Path("projects/demo/poster.cover.png")
         return project

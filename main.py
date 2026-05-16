@@ -70,6 +70,17 @@ def process(
             ),
         ),
     ] = False,
+    glossary_check: Annotated[
+        bool,
+        typer.Option(
+            "--glossary-check",
+            help=(
+                "Force-enable the fixed-glossary localization check stage "
+                "for this run. Overrides ENABLE_GLOSSARY_CHECK setting "
+                "(default off). Only runs if a refined SRT exists."
+            ),
+        ),
+    ] = False,
     cover: Annotated[
         bool,
         typer.Option(
@@ -103,7 +114,8 @@ def process(
     logger.info(
         f"CLI invoked with source_str={source_str}, "
         f"translation_hint={translation_hint}, break_after={break_after}, "
-        f"parent_project={parent_project}, refine={refine}, cover={cover}"
+        f"parent_project={parent_project}, refine={refine}, "
+        f"glossary_check={glossary_check}, cover={cover}"
     )
 
     try:
@@ -113,6 +125,7 @@ def process(
             break_after=break_after,
             parent_project_path=parent_project,
             enable_refine=refine,
+            enable_glossary_check=glossary_check,
             enable_cover=cover,
         )
         logger.success(f"Successfully completed processing for {source_str}")

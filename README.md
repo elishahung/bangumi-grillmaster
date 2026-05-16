@@ -51,9 +51,13 @@ Video ID
     ↓
 產生 SRT 字幕
     ↓
-翻譯字幕 (Gemini: pre-pass → 併發 chunk 翻譯 → 組裝驗證)
+Pre-pass 分析 (Gemini: 全片簡報，定調人物/專名/語氣/分段摘要)
+    ↓
+併發 chunk 翻譯 (Gemini: 分塊平行翻譯 → 組裝驗證修正)
     ↓
 潤飾字幕 (Codex, 可選)
+    ↓
+固定詞彙校對 (Codex)
     ↓
 Finalize：格式清理，輸出 ASS (套樣式) + SRT
     ↓
@@ -147,6 +151,7 @@ ENABLE_GEMINI_CLI_PREPASS=false         # 改用 Gemini CLI 跑 pre-pass
 
 # 可選：Codex 後處理（需安裝 Codex CLI）
 ENABLE_SRT_REFINE=true             # 翻譯後再用 Codex 潤飾繁中字幕
+ENABLE_GLOSSARY_CHECK=true         # 潤飾後再用 Codex 校對殘留的英文/假名專名
 ENABLE_COVER_GENERATION=true       # 下載後並行 Codex 風格化封面圖
 
 # 可選：下載/歸檔/封裝
@@ -168,11 +173,13 @@ projects/{video_id}/
 ├── .pre_pass/                # Gemini pre-pass 簡報與圖片快取
 │   └── pre_pass.json
 ├── .chunks/                  # chunk 音檔 / 圖片 / 翻譯回應快取（供 resume）
-├── .refine/                  # Codex 潤飾快取（可選）
+├── .refine/                  # Codex 潤飾報告（可選）
+├── .glossary_check/          # Codex 固定詞彙校對報告（可選）
 ├── poster.jpg                # yt-dlp 取得的原始封面
 ├── poster.cover.png          # Codex 風格化封面（可選）
 ├── video.cht.srt             # 繁體中文翻譯字幕
 ├── video.cht.refined.srt     # Codex 潤飾後字幕（可選）
+├── video.cht.glossary_checked.srt  # Codex 固定詞彙校對後字幕（可選）
 ├── video.cht.finalized.srt   # 最終 SRT（標點清理，給不支援 ASS 的裝置）
 └── video.cht.ass             # 最終 ASS（套樣式 + 標點清理）
 ```
