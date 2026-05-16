@@ -47,6 +47,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 _LINE_EDGE_PUNCT = re.compile(r"^[\s，、；。]+|[\s，、；。]+$")
 _ELLIPSIS_RUN = re.compile(r"(?:\.{3,}|[…⋯])+")
 _QUOTE_TAIL_PUNCT = re.compile(r"[\s，、；。]+(?=[」』])")
+# Netflix TC: full-width punctuation carries no adjacent spaces. Strip
+# whitespace hugging a mid-line ，、；。：！？ — e.g. the refine LLM writes
+# two clauses on one line as "好帥。 很有型", and the "。"→"，" pass would
+# otherwise leave "好帥， 很有型".
+_FW_PUNCT_SPACE = re.compile(r"[ \t　]*([，、；。：！？])[ \t　]*")
 # Netflix Traditional Chinese (Taiwan) TTSG: two-speaker dialogue uses an
 # English hyphen with NO space after it. Normalize a leading speaker dash —
 # any hyphen/dash variant incl. full-width "－" (U+FF0D), en/em dash, minus —
@@ -224,6 +229,7 @@ def _clean_line(line: str) -> str:
     line = _SPEAKER_DASH.sub("-", line)
     line = _ELLIPSIS_RUN.sub("…", line)
     line = _QUOTE_TAIL_PUNCT.sub("", line)
+    line = _FW_PUNCT_SPACE.sub(r"\1", line)
     return line.replace("。", "，")
 
 

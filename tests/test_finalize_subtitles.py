@@ -118,6 +118,24 @@ class AssConverterTextCleaningTests(unittest.TestCase):
             "第一行\n第二行",
         )
 
+    def test_strips_space_around_midline_fullwidth_punct(self):
+        # Refine writes two clauses as "。 "; mid-line 。→， must not leave
+        # an orphaned space (Netflix TC: no space around full-width punct).
+        self.assertEqual(
+            _clean_text("竟然。 太誇張了吧。"), "竟然，太誇張了吧"
+        )
+        self.assertEqual(
+            _clean_text("好帥。 很有型耶。"), "好帥，很有型耶"
+        )
+        self.assertEqual(
+            _clean_text("真的嗎？ 太好了！"), "真的嗎？太好了！"
+        )
+        self.assertEqual(_clean_text("好 ， 壞"), "好，壞")
+        self.assertEqual(
+            _clean_text("第一句。 第二句。\n好， 啊"),
+            "第一句，第二句\n好，啊",
+        )
+
     def test_collapses_speaker_dash_space(self):
         # Netflix TC TTSG: speaker hyphen has NO space after it.
         self.assertEqual(_clean_text("- 晚安"), "-晚安")
