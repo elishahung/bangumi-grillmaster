@@ -111,6 +111,9 @@ class GeminiInlineMediaTests(unittest.IsolatedAsyncioTestCase):
         with patch(
             "services.gemini.pre_pass.prepare_pre_pass_media_assets",
             return_value=assets,
+        ), patch(
+            "services.gemini.pre_pass.settings.enable_gemini_cli_prepass",
+            False,
         ):
             parsed, cost = await run_pre_pass(
                 client,

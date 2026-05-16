@@ -1,16 +1,31 @@
-"""Pre-pass analysis: scan full SRT once to produce a shared briefing for chunks."""
+"""Pre-pass analysis: scan full SRT once to produce a shared briefing for chunks.
+
+Two thin inference clients feed a single orchestrator. ``_infer_via_api``
+uses the genai SDK, which enforces the response schema natively (no retry
+needed here). ``_infer_via_cli`` delegates to ``run_gemini_cli``, which owns
+all CLI-side schema enforcement and repair retries internally. ``run_pre_pass``
+just picks one client based on ``settings.enable_gemini_cli_prepass`` and
+writes the explicit ``pre_pass.json`` hand-off.
+"""
 
 import asyncio
 import json
 import hashlib
 from pathlib import Path
+
 from google import genai
 from loguru import logger
 from pydantic import BaseModel
 
 from settings import settings
 from services.srt import SrtBlock
-from .assets import media_refs_to_parts, prepare_pre_pass_media_assets
+from .assets import (
+    FrameSpec,
+    LocalMediaRef,
+    media_refs_to_parts,
+    prepare_pre_pass_media_assets,
+)
+from .cli import GeminiCliQuotaError, run_gemini_cli
 from .cost import calculate_cost
 from .errors import PrePassError
 from services.fixed_glossary import (
@@ -98,6 +113,82 @@ def _build_user_message(
     return "\n".join(parts)
 
 
+async def _infer_via_api(
+    client: genai.Client,
+    *,
+    system_instruction: str,
+    user_message: str,
+    audio_ref: LocalMediaRef,
+    frame_refs: list[FrameSpec],
+) -> tuple[PrePassResult, float, int]:
+    """genai SDK client: native ``response_json_schema`` enforcement.
+
+    No retry loop — the SDK guarantees a schema-conforming response.
+    """
+    thinking_level = genai.types.ThinkingLevel[settings.gemini_thinking_level]
+    config = genai.types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+        response_json_schema=PrePassResult.model_json_schema(),
+        safety_settings=[
+            genai.types.SafetySetting(
+                category=genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            genai.types.SafetySetting(
+                category=genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            genai.types.SafetySetting(
+                category=genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+            genai.types.SafetySetting(
+                category=genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+        ],
+        thinking_config=genai.types.ThinkingConfig(
+            thinking_level=thinking_level
+        ),
+    )
+    media_parts = media_refs_to_parts([audio_ref, *frame_refs])
+    response = await client.aio.models.generate_content(
+        model=settings.gemini_model,
+        contents=[*media_parts, user_message],
+        config=config,
+    )
+    cost = calculate_cost(response.usage_metadata, settings.gemini_model)
+    result = PrePassResult.model_validate_json(response.text or "")
+    return result, cost, 1
+
+
+async def _infer_via_cli(
+    *,
+    system_instruction: str,
+    user_message: str,
+    audio_ref: LocalMediaRef,
+    frame_refs: list[FrameSpec],
+) -> tuple[PrePassResult, float, int]:
+    """Gemini CLI client. Schema enforcement/repair lives in run_gemini_cli.
+
+    Cost is always 0.0 (subscription auth). ``requests`` is the CLI-reported
+    backend request count, including its internal schema-repair attempts.
+    """
+    prompt = f"{system_instruction}\n\n{user_message}"
+    media_files = [audio_ref.path, *[frame.path for frame in frame_refs]]
+    cli_result = await asyncio.to_thread(
+        run_gemini_cli,
+        prompt,
+        model=settings.gemini_cli_model,
+        media_files=media_files,
+        timeout=settings.gemini_cli_timeout_secs,
+        schema=PrePassResult,
+    )
+    result = PrePassResult.model_validate_json(cli_result.response)
+    return result, 0.0, cli_result.requests
+
+
 async def run_pre_pass(
     client: genai.Client,
     video_description: str | None,
@@ -112,8 +203,9 @@ async def run_pre_pass(
 ) -> tuple[PrePassResult, float]:
     """Run the single pre-pass call. Returns (parsed result, cost in USD).
 
-    Retries up to gemini_chunk_max_retries on failure (schema parse or API error).
-    Raises the last exception if all retries exhaust.
+    Dispatches to the CLI client when ``settings.enable_gemini_cli_prepass``
+    is set (cost 0.0, subscription auth), otherwise the genai SDK client.
+    Raises ``PrePassError`` on failure.
     """
     pre_pass_assets = prepare_pre_pass_media_assets(
         video_path=video_path,
@@ -179,7 +271,13 @@ async def run_pre_pass(
         )
     if parent_pre_pass_context:
         system_instruction += f"\n\n{PARENT_PRE_PASS_INSTRUCTION}"
-    thinking_level = genai.types.ThinkingLevel[settings.gemini_thinking_level]
+
+    use_cli = settings.enable_gemini_cli_prepass
+    backend = "cli" if use_cli else "api"
+    active_model = (
+        settings.gemini_cli_model if use_cli else settings.gemini_model
+    )
+
     prompt_digest = hashlib.sha256(
         (
             system_instruction
@@ -187,6 +285,8 @@ async def run_pre_pass(
             + str(settings.gemini_pre_pass_frame_interval_seconds)
             + str(settings.gemini_pre_pass_frame_max_side)
             + str(settings.gemini_intro_skip_seconds)
+            + backend
+            + active_model
         ).encode("utf-8")
     ).hexdigest()
     manifest_path = pre_pass_cache_dir / "manifest.json"
@@ -210,102 +310,70 @@ async def run_pre_pass(
     if parent_pre_pass_context:
         logger.info(f"[pre-pass] Parent pre-pass context injected")
 
-    config = genai.types.GenerateContentConfig(
-        system_instruction=system_instruction,
-        response_mime_type="application/json",
-        response_json_schema=PrePassResult.model_json_schema(),
-        safety_settings=[
-            genai.types.SafetySetting(
-                category=genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
-            ),
-            genai.types.SafetySetting(
-                category=genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
-            ),
-            genai.types.SafetySetting(
-                category=genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
-            ),
-            genai.types.SafetySetting(
-                category=genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold=genai.types.HarmBlockThreshold.BLOCK_NONE,
-            ),
-        ],
-        thinking_config=genai.types.ThinkingConfig(
-            thinking_level=thinking_level
-        ),
+    logger.info(f"[pre-pass] Backend: {backend} (model={active_model})")
+    try:
+        if use_cli:
+            result, cost, requests = await _infer_via_cli(
+                system_instruction=system_instruction,
+                user_message=user_message,
+                audio_ref=pre_pass_assets.audio,
+                frame_refs=pre_pass_assets.frames,
+            )
+        else:
+            result, cost, requests = await _infer_via_api(
+                client,
+                system_instruction=system_instruction,
+                user_message=user_message,
+                audio_ref=pre_pass_assets.audio,
+                frame_refs=pre_pass_assets.frames,
+            )
+    except GeminiCliQuotaError as e:
+        logger.error(f"[pre-pass] Gemini CLI quota exhausted: {e}")
+        raise PrePassError(
+            f"Gemini CLI quota exhausted: {e}", accumulated_cost=0.0
+        ) from e
+    except Exception as e:
+        logger.error(f"[pre-pass] Failed: {e}")
+        raise PrePassError(
+            f"Pre-pass failed: {e}", accumulated_cost=0.0
+        ) from e
+
+    pre_pass_path.parent.mkdir(parents=True, exist_ok=True)
+    pre_pass_path.write_text(
+        result.model_dump_json(indent=2),
+        encoding="utf-8",
     )
-
-    max_retries = settings.gemini_chunk_max_retries
-    last_error: Exception | None = None
-    total_cost = 0.0
-    for attempt in range(1, max_retries + 1):
-        try:
-            media_parts = media_refs_to_parts(
-                [pre_pass_assets.audio, *pre_pass_assets.frames]
-            )
-            logger.info(
-                f"[pre-pass] Requesting analysis (attempt {attempt}/{max_retries}, "
-                f"thinking={settings.gemini_thinking_level})"
-            )
-            response = await client.aio.models.generate_content(
-                model=settings.gemini_model,
-                contents=[*media_parts, user_message],
-                config=config,
-            )
-            cost = calculate_cost(
-                response.usage_metadata, settings.gemini_model
-            )
-            total_cost += cost
-            result = PrePassResult.model_validate_json(response.text or "")
-            pre_pass_path.parent.mkdir(parents=True, exist_ok=True)
-            pre_pass_path.write_text(
-                result.model_dump_json(indent=2),
-                encoding="utf-8",
-            )
-            pre_pass_cache_dir.mkdir(parents=True, exist_ok=True)
-            manifest_path.write_text(
-                json.dumps(
-                    {
-                        "prompt_digest": prompt_digest,
-                        "instruction_sha256": hashlib.sha256(
-                            system_instruction.encode("utf-8")
-                        ).hexdigest(),
-                        "user_message_sha256": hashlib.sha256(
-                            user_message.encode("utf-8")
-                        ).hexdigest(),
-                        "frames": [
-                            frame.model_dump(mode="json")
-                            for frame in pre_pass_assets.frames
-                        ],
-                        "audio": pre_pass_assets.audio.model_dump(mode="json"),
-                        "asset_manifest_path": str(
-                            pre_pass_assets.manifest_path
-                        ),
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-                encoding="utf-8",
-            )
-            logger.success(
-                f"[pre-pass] Completed: {len(result.characters)} characters, "
-                f"{len(result.proper_nouns)} proper_nouns, "
-                f"{len(result.glossary)} glossary, "
-                f"{len(result.catchphrases)} catchphrases, "
-                f"{len(result.segment_summaries)} segment_summaries (${cost:.4f})"
-            )
-            return result, total_cost
-        except Exception as e:
-            last_error = e
-            logger.warning(f"[pre-pass] Attempt {attempt} failed: {e}")
-            if attempt < max_retries:
-                backoff = 2 ** (attempt - 1)
-                await asyncio.sleep(backoff)
-
-    logger.error(f"[pre-pass] All {max_retries} attempts failed")
-    raise PrePassError(
-        f"Pre-pass failed after {max_retries} attempts",
-        accumulated_cost=total_cost,
-    ) from last_error
+    pre_pass_cache_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "prompt_digest": prompt_digest,
+                "backend": backend,
+                "instruction_sha256": hashlib.sha256(
+                    system_instruction.encode("utf-8")
+                ).hexdigest(),
+                "user_message_sha256": hashlib.sha256(
+                    user_message.encode("utf-8")
+                ).hexdigest(),
+                "frames": [
+                    frame.model_dump(mode="json")
+                    for frame in pre_pass_assets.frames
+                ],
+                "audio": pre_pass_assets.audio.model_dump(mode="json"),
+                "asset_manifest_path": str(pre_pass_assets.manifest_path),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    requests_note = f", CLI requests: {requests}" if use_cli else ""
+    logger.success(
+        f"[pre-pass] Completed: {len(result.characters)} characters, "
+        f"{len(result.proper_nouns)} proper_nouns, "
+        f"{len(result.glossary)} glossary, "
+        f"{len(result.catchphrases)} catchphrases, "
+        f"{len(result.segment_summaries)} segment_summaries "
+        f"(${cost:.4f}{requests_note})"
+    )
+    return result, cost

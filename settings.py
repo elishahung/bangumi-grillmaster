@@ -78,6 +78,28 @@ class Settings(BaseSettings):
         description="Pre-pass fixed glossary injection mode. False = normalized substring pre-filter (only matched entries injected). True = inject the entire glossary as a reference table and let the model resolve matches.",
     )
 
+    # --- Pre-pass: optional Gemini CLI backend (subscription auth) -----------
+    enable_gemini_cli_prepass: bool = Field(
+        default=False,
+        description="Run the pre-pass via the `gemini` CLI (subscription/OAuth auth) instead of the paid Gemini API. Default off keeps the API path unchanged.",
+    )
+    gemini_cli_executable: str = Field(
+        default="gemini",
+        description="Gemini CLI executable name or absolute path",
+    )
+    gemini_cli_model: str = Field(
+        default="gemini-3.1-pro-preview",
+        description="Model identifier passed to the Gemini CLI pre-pass (gemini -m <model>); verified available on subscription auth",
+    )
+    gemini_cli_timeout_secs: int = Field(
+        default=900,
+        description="Per-invocation timeout for the Gemini CLI pre-pass subprocess",
+    )
+    gemini_cli_max_retries: int = Field(
+        default=3,
+        description="Schema-repair retry cap for the Gemini CLI pre-pass (separate from gemini_chunk_max_retries; each repair costs a real CLI quota request)",
+    )
+
     # --- Translation: structural fix (DeepSeek, non-Gemini) ------------------
     deepseek_api_key: str = Field(
         description="DeepSeek API key used by the chunk structural fix layer",

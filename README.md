@@ -142,6 +142,9 @@ GEMINI_CHUNK_FRAME_MAX_SIDE=768        # chunk 圖片最長邊尺寸
 GEMINI_CHUNK_MISSING_BLOCK_TOLERANCE=2 # 每塊允許未對齊/缺漏字幕區塊數上限
 ENABLE_FULL_FIXED_GLOSSARY=false       # 固定譯名表整份帶入 pre-pass（false=只帶比對到的）
 
+# 可選：Gemini CLI pre-pass（訂閱制省 API 費用；需安裝 Gemini CLI）
+ENABLE_GEMINI_CLI_PREPASS=false         # 改用 Gemini CLI 跑 pre-pass
+
 # 可選：Codex 後處理（需安裝 Codex CLI）
 ENABLE_SRT_REFINE=true             # 翻譯後再用 Codex 潤飾繁中字幕
 ENABLE_COVER_GENERATION=true       # 下載後並行 Codex 風格化封面圖
