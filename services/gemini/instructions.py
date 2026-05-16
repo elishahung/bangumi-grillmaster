@@ -32,12 +32,14 @@ decisions:
   name, or group+member), apply the target's script/romanization choice to
   that component but KEEP the rest of the source name; do NOT replace the
   longer name with the shorter target, and do NOT prepend a group label the
-  source did not say (source 「濱家隆一」 → 濱家隆一; source 「盛山晋太郎」 →
-  盛山晉太郎). Symmetrically, when the source uses only a SHORTER form than a
+  source did not say (source 「徳井義実」 → 德井義實, not the glossary's
+  shorter 德井 nor チュートリアル徳井義実; 徳→德, 実→實 — the kept span is
+  converted, never a verbatim copy of the Japanese kanji). Symmetrically, when the source uses only a SHORTER form than a
   glossary entry (e.g. surname-only while the entry is a full name), keep
   that shorter span — apply the entry's script/kanji choice to the spoken
   token only and do NOT append the missing given-name/group components
-  (source 「山添」 → 山添, NOT 山添寬, even though the entry is 山添寛/山添寬).
+  (source 「徳井」 → 德井, NOT 德井義実, even though the entry is 徳井義実/
+  德井義實; the 徳→德 conversion still applies to the kept span).
 - A `・組合：` line is BOTH a normal mapping (use it when the 組合 name is
   actually spoken) AND the disambiguation context identifying which act its
   indented members belong to. Member tokens are often very short and
@@ -82,13 +84,15 @@ mapping to one Traditional Chinese target.
   script/romanization choice to that component but KEEP the rest of the
   source name; do NOT replace the longer name with the shorter glossary
   label, and do NOT prepend a group label the source did not say. (Source
-  「濱家隆一」 → 濱家隆一; 「盛山晋太郎」 → 盛山晉太郎 — the 見取り図→Mitorizu
-  rendering applies only to the token 見取り図.) Symmetrically, when the
+  「徳井義実」 → 德井義實 (not the glossary's shorter 德井 nor チュートリアル
+  徳井義実; 徳→德, 実→實 — the kept span is converted, never a verbatim copy
+  of the Japanese kanji) — a 見取り図→Mitorizu rendering applies only to the
+  token 見取り図.) Symmetrically, when the
   source uses only a SHORTER form than the entry (e.g. surname-only while
   the entry is a full name), keep that shorter span — apply the entry's
   script/kanji choice to the spoken token only and do NOT append the missing
-  components (source 「山添」 → 山添, NOT 山添寬, even though the entry is
-  山添寛/山添寬). All aliases on a line refer
+  components (source 「徳井」 → 德井, NOT 德井義実, even though the entry is
+  徳井義実/德井義實; the 徳→德 conversion still applies to the kept span). All aliases on a line refer
   to the same entity.
 - A `・組合：` line is both a normal mapping (when the 組合 name is spoken)
   and the disambiguation context for its indented members. Member tokens are
@@ -147,12 +151,12 @@ You DO NOT translate subtitles. You analyze the full source SRT (ASR-generated, 
 
 - **summary**: ~200 Chinese chars describing the show's overall premise, segment structure, and comedic style based on the audio vibe. Helps downstream workers set tone.
 
-- **characters**: List every recurring named person. For each: `name_jp` (as they appear in source, in kanji/kana), `name_zh` (agreed Traditional Chinese rendering, consistent with program description and common Taiwanese conventions — do NOT bake honorifics like 桑/醬/君 into `name_zh`; honorifics are rendered per-utterance by the downstream translator based on whichever suffix appears in source), `role_note` (short description, e.g., "主持人", "嘉賓", "搞笑藝人組合")
+- **characters**: List every recurring named person. For each: `name_jp` (as they appear in source, in kanji/kana), `name_zh` (agreed Traditional Chinese rendering, consistent with program description and common Taiwanese conventions; ALWAYS apply Taiwan kanji forms so `name_zh` is NEVER a verbatim copy of a Japanese-shinjitai `name_jp` — e.g. name_jp 「猪狩蒼弥」 → name_zh 「豬狩蒼彌」 (猪→豬, 弥→彌; likewise 徳→德, 実→實, 晋→晉, 寛→寬) — do NOT bake honorifics like 桑/醬/君 into `name_zh`; honorifics are rendered per-utterance by the downstream translator based on whichever suffix appears in source), `role_note` (short description, e.g., "主持人", "嘉賓", "搞笑藝人組合")
 
 - **proper_nouns**: Dict mapping source term → corrected/standardized Traditional Chinese term. Include BOTH:
   - ASR corrections (CRITICAL: Verify via Audio. If the source text has misrecognized text but you hear the correct term in the audio, map the incorrect text to the correct translation. e.g., `"第五": "大悟"` if ASR misheard 大悟)
   - Standard proper-noun translations (e.g., `"吉本興業": "吉本興業"`, `"チャンスの時間": "機會的時間"`)
-  - Same-span rule: each key→value MUST be the same name at the same span the source uses — only fix script / kana↔kanji / ASR errors and apply Taiwan kanji forms (稲→稻, 徳→德, 寛→寬, 兎→兔, 内→內; expand the 々 iteration mark, e.g. 佐々木→佐佐木). NEVER expand a partial name to a fuller one (source 「川北」 → 川北, not 川北茂澄; source 「山添」 → 山添, not 山添寬 — even if the glossary lists the full name 山添寛/山添寬) and NEVER drop components the source token includes (source 「濱家隆一」 → 濱家隆一, not 濱家). An identity-looking value is valid only AFTER this kanji conversion, never as a verbatim copy of Japanese-shinjitai text.
+  - Same-span rule: each key→value MUST be the same name at the same span the source uses — only fix script / kana↔kanji / ASR errors and apply Taiwan kanji forms (稲→稻, 徳→德, 寛→寬, 兎→兔, 内→內; expand the 々 iteration mark, e.g. 佐々木→佐佐木). NEVER expand a partial name to a fuller one (source 「徳井」 → 德井, not 德井義実 — even if the glossary lists the full name 徳井義実/德井義實; the kept span still converts 徳→德) and NEVER drop components the source token includes (source 「徳井義実」 → 德井義實, not 德井; 徳→德, 実→實). An identity-looking value is valid only AFTER this kanji conversion; it is NEVER a verbatim copy of Japanese-shinjitai text — e.g. name_jp 「猪狩蒼弥」 → name_zh 豬狩蒼彌 (猪→豬, 弥→彌), never the verbatim 猪狩蒼弥.
   Scan the full SRT, listen to the audio, inspect the images, and check the program description thoroughly for likely ASR errors on names and titles.
 
 - **Proper-noun localization policy**: Aim for information parity — a Chinese viewer should recover as much of the naming intent (meaning, wordplay, kanji core, member/place names, loanword parts) as a Japanese viewer gets from the original; a bare phonetic transliteration that hides that intent is a last resort, not the default. For program/segment/talent/group names and other proper nouns, take the FIRST tier that fits:
