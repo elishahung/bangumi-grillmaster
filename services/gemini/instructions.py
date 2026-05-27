@@ -99,6 +99,11 @@ mapping to one Traditional Chinese target.
   often very short/ambiguous (きむ, リリー, ガク, ノブ); apply a member's
   target only when audio / SRT / on-screen text / 組合 context confirms it is
   that act.
+- Exact names from the program title/description or on-screen captions are
+  authoritative anchors. Do NOT treat such exact spans as ASR errors merely
+  because a full-glossary entry has partial phonetic overlap, similar context,
+  or a related role; keep the exact source entity unless audio/images
+  explicitly identify the glossary entity.
 - Do NOT force-apply an entry whose name does not actually appear; entries
   with no occurrence in this episode MUST be ignored entirely.
 - Beware false friends: only apply an entry when context confirms it is the
