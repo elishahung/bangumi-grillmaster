@@ -15,7 +15,9 @@ from services.gemini.errors import (
 from services.gemini.gemini import Gemini, TranslationRequest
 from services.gemini.pre_pass import PrePassResult
 from services.media import MediaProcessor
+from services.progress import RichProgressReporter
 from services.srt import SrtBlock, parse_srt
+from rich.console import Console
 
 
 class FakeProgressReporter:
@@ -292,6 +294,25 @@ class MediaProgressTests(unittest.TestCase):
         self.assertIn(("start_stage", 1, "Burning subtitles", 1.0), progress.events)
         self.assertIn(("advance", 1, 0.5, None), progress.events)
         self.assertEqual(progress.events[-1], ("finish", 1, "done"))
+
+
+class RichProgressReporterTests(unittest.TestCase):
+    def test_completed_chunk_task_does_not_render_during_next_stage(self):
+        with open("NUL", "w", encoding="utf-8") as sink:
+            reporter = RichProgressReporter(
+                Console(force_terminal=False, file=sink)
+            )
+            with reporter:
+                reporter.chunk_started(0, 1, 1, 10)
+                reporter.chunk_finished(0, retries=0, cost=0.1)
+                self.assertEqual(list(reporter.progress.tasks), [])
+
+                task_id = reporter.start_stage(
+                    "Burning subtitles", total=1.0
+                )
+                self.assertEqual(len(list(reporter.progress.tasks)), 1)
+                reporter.finish(task_id)
+                self.assertEqual(list(reporter.progress.tasks), [])
 
 
 if __name__ == "__main__":

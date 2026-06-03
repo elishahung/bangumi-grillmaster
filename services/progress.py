@@ -135,6 +135,11 @@ class RichProgressReporter(NoopProgressReporter):
         logger.add(sys.stderr)
         self._live_started = False
 
+    def _get_task(self, task_id: TaskID):
+        return next(
+            task for task in self.progress.tasks if task.id == task_id
+        )
+
     def start_stage(
         self, label: str, total: float | None = None
     ) -> TaskID | None:
@@ -168,10 +173,11 @@ class RichProgressReporter(NoopProgressReporter):
         if task_id is None:
             return
         with self._lock:
-            task = self.progress.tasks[task_id]
+            task = self._get_task(task_id)
             completed = task.total if task.total is not None else task.completed
             self.progress.update(task_id, completed=completed, status=status)
             self.progress.stop_task(task_id)
+            self.progress.remove_task(task_id)
             self._stop_live()
 
     def chunk_started(
@@ -225,11 +231,15 @@ class RichProgressReporter(NoopProgressReporter):
         self.progress.update(self._chunk_task_id, status=status)
         if (
             self._chunk_total > 0
-            and self.progress.tasks[self._chunk_task_id].completed
-            >= self._chunk_total
+            and self._get_task(self._chunk_task_id).completed >= self._chunk_total
         ):
             self.progress.stop_task(self._chunk_task_id)
+            self.progress.remove_task(self._chunk_task_id)
             self._chunk_task_id = None
+            self._chunk_total = 0
+            self._chunk_active = 0
+            self._chunk_failed = 0
+            self._chunk_retries = 0
             self._stop_live()
 
 
