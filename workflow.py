@@ -38,6 +38,7 @@ def submit_project(
     enable_refine: bool = False,
     enable_glossary_check: bool = False,
     enable_cover: bool = False,
+    remix_noise_name: str | None = None,
 ) -> None:
     """Submit a new video project for processing.
 
@@ -61,6 +62,7 @@ def submit_project(
         enable_cover: Force-enable the optional async cover image stylization.
             Overrides ``settings.enable_cover_generation`` when True. Always
             skipped when ``break_after`` is set.
+        remix_noise_name: Optional prepared noise set name for remix packaging.
 
     Note:
         The project will be automatically saved to the projects directory before
@@ -80,6 +82,7 @@ def submit_project(
         enable_refine=enable_refine,
         enable_glossary_check=enable_glossary_check,
         enable_cover=enable_cover,
+        remix_noise_name=remix_noise_name,
     )
 
 
@@ -112,6 +115,7 @@ def process_project(
     enable_refine: bool = False,
     enable_glossary_check: bool = False,
     enable_cover: bool = False,
+    remix_noise_name: str | None = None,
     progress: NoopProgressReporter | None = None,
 ) -> None:
     """Process a video project with an auto-enabled CLI progress reporter."""
@@ -127,6 +131,7 @@ def process_project(
             enable_refine=enable_refine,
             enable_glossary_check=enable_glossary_check,
             enable_cover=enable_cover,
+            remix_noise_name=remix_noise_name,
             progress=active_progress,
         )
 
@@ -137,6 +142,7 @@ def _process_project_impl(
     enable_refine: bool = False,
     enable_glossary_check: bool = False,
     enable_cover: bool = False,
+    remix_noise_name: str | None = None,
     progress: NoopProgressReporter | None = None,
 ) -> None:
     """Process a video project through the complete captioning pipeline.
@@ -169,6 +175,7 @@ def _process_project_impl(
         enable_cover: Force-enable the optional async cover image stylization.
             Overrides ``settings.enable_cover_generation`` when True. Always
             skipped when ``break_after`` is set.
+        remix_noise_name: Optional prepared noise set name for remix packaging.
 
     Raises:
         Exception: If any required stage of the processing fails.
@@ -440,7 +447,13 @@ def _process_project_impl(
     # Package project (burn-in + cover copy)
     if settings.package_path is not None:
         source_root = archived_location or project.project_path
-        package_project(project, source_root, settings.package_path, progress)
+        package_project(
+            project,
+            source_root,
+            settings.package_path,
+            progress,
+            remix_noise_name=remix_noise_name,
+        )
 
     logger.info(
         f"Project {project_id} total accumulated API cost: "

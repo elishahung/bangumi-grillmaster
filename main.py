@@ -1,35 +1,90 @@
-"""Command-line interface for the video captioning pipeline.
+"""Command-line interface for the video captioning pipeline."""
 
-This module provides a CLI interface to submit and process online videos
-for automatic captioning and translation.
-"""
+from pathlib import Path
+import sys
 
 import typer
-from typing_extensions import Annotated
 from loguru import logger
+from typing_extensions import Annotated
+
 from project import ProgressStage
+from services.progress import create_progress_reporter
+from services.package import package_project_directory, prepare_noise
+from settings import settings
 from workflow import submit_project
 
 
-app = typer.Typer(
-    help="Bangumi GrillMaster - Automatic transcription and translation for Bangumi videos",
+RESERVED_COMMANDS = {"package", "noise", "process"}
+
+legacy_app = typer.Typer(
+    help=(
+        "Bangumi GrillMaster - Automatic transcription and translation for "
+        "Bangumi videos"
+    ),
     add_completion=False,
 )
+tools_app = typer.Typer(
+    help="Bangumi GrillMaster packaging tools",
+    add_completion=False,
+)
+app = tools_app
 
 
-@app.command()
+def _run_process(
+    source_str: str,
+    translation_hint: str | None,
+    break_after: ProgressStage | None,
+    parent_project: str | None,
+    refine: bool,
+    glossary_check: bool,
+    cover: bool,
+    remix: str | None,
+) -> None:
+    logger.info(
+        f"CLI invoked with source_str={source_str}, "
+        f"translation_hint={translation_hint}, break_after={break_after}, "
+        f"parent_project={parent_project}, refine={refine}, "
+        f"glossary_check={glossary_check}, cover={cover}, remix={remix}"
+    )
+
+    try:
+        submit_project(
+            source_str=source_str,
+            translation_hint=translation_hint,
+            break_after=break_after,
+            parent_project_path=parent_project,
+            enable_refine=refine,
+            enable_glossary_check=glossary_check,
+            enable_cover=cover,
+            remix_noise_name=remix,
+        )
+        logger.success(f"Successfully completed processing for {source_str}")
+    except Exception as e:
+        logger.error(f"Failed to process video {source_str}: {e}")
+        raise typer.Exit(code=1)
+
+
+@legacy_app.command()
+@tools_app.command("process")
 def process(
     source_str: Annotated[
         str,
         typer.Argument(
-            help="Video source, id or url (e.g., 'BV1ZArvBaEqL', 'https://www.bilibili.com/video/BV1ZArvBaEqL', 'https://youtu.be/dQw4w9WgXcQ', 'v=dQw4w9WgXcQ').",
+            help=(
+                "Video source, id or url (e.g., 'BV1ZArvBaEqL', "
+                "'https://www.bilibili.com/video/BV1ZArvBaEqL', "
+                "'https://youtu.be/dQw4w9WgXcQ', 'v=dQw4w9WgXcQ')."
+            ),
             show_default=False,
         ),
     ],
     translation_hint: Annotated[
         str | None,
         typer.Argument(
-            help="Translation hint for the video. If not provided, uses video title.",
+            help=(
+                "Translation hint for the video. If not provided, uses "
+                "video title."
+            ),
             show_default=False,
         ),
     ] = None,
@@ -53,9 +108,7 @@ def process(
             help=(
                 "Path to a parent project directory whose pre_pass.json "
                 "should seed this project's pre-pass for cross-episode "
-                "consistency (e.g., 'projects/BV1ZArvBaEqL' or an archived "
-                "path). Accepts a directory path, not an ID, since the "
-                "parent project may already be archived."
+                "consistency."
             ),
             show_default=False,
         ),
@@ -66,7 +119,7 @@ def process(
             "--refine",
             help=(
                 "Force-enable subtitle refinement stage for this run. "
-                "Overrides ENABLE_SRT_REFINE setting (default off)."
+                "Overrides ENABLE_SRT_REFINE setting."
             ),
         ),
     ] = False,
@@ -76,8 +129,7 @@ def process(
             "--glossary-check",
             help=(
                 "Force-enable the fixed-glossary localization check stage "
-                "for this run. Overrides ENABLE_GLOSSARY_CHECK setting "
-                "(default off). Only runs if a refined SRT exists."
+                "for this run."
             ),
         ),
     ] = False,
@@ -87,56 +139,109 @@ def process(
             "--cover",
             help=(
                 "Force-enable async cover image generation for this run. "
-                "Overrides ENABLE_COVER_GENERATION setting (default off). "
                 "Skipped entirely when --break-after is also set."
             ),
         ),
     ] = False,
+    remix: Annotated[
+        str | None,
+        typer.Option(
+            "--remix",
+            help="Use a prepared noise set for remix packaging.",
+            show_default=False,
+        ),
+    ] = None,
 ) -> None:
-    """Submit and process a online video for captioning and translation.
-
-    This command will:
-    1. Create a new project with the given video source
-    2. Download the video from source
-    3. Extract audio and generate transcription
-    4. Translate subtitles to target language
-
-    Examples:
-        # Process a video without translation hint
-        python main.py BV1ZArvBaEqL
-
-        # Process a video with translation hint
-        python main.py BV1ZArvBaEqL "Python tutorial video"
-
-        # Process a video with description containing spaces
-        python main.py BV1ZArvBaEqL "This is a machine learning basics video"
-    """
-    logger.info(
-        f"CLI invoked with source_str={source_str}, "
-        f"translation_hint={translation_hint}, break_after={break_after}, "
-        f"parent_project={parent_project}, refine={refine}, "
-        f"glossary_check={glossary_check}, cover={cover}"
+    """Submit and process an online video for captioning and translation."""
+    _run_process(
+        source_str=source_str,
+        translation_hint=translation_hint,
+        break_after=break_after,
+        parent_project=parent_project,
+        refine=refine,
+        glossary_check=glossary_check,
+        cover=cover,
+        remix=remix,
     )
 
+
+@tools_app.command("package")
+def package_command(
+    project_dir: Annotated[
+        Path,
+        typer.Argument(
+            help="Path to an already-finalized project directory.",
+            show_default=False,
+        ),
+    ],
+    remix: Annotated[
+        str | None,
+        typer.Option(
+            "--remix",
+            help="Use a prepared noise set for remix packaging.",
+            show_default=False,
+        ),
+    ] = None,
+) -> None:
+    """Run only the package step for an existing project directory."""
+    if settings.package_path is None:
+        logger.error("PACKAGE_PATH is not set; cannot package project")
+        raise typer.Exit(code=1)
     try:
-        submit_project(
-            source_str=source_str,
-            translation_hint=translation_hint,
-            break_after=break_after,
-            parent_project_path=parent_project,
-            enable_refine=refine,
-            enable_glossary_check=glossary_check,
-            enable_cover=cover,
-        )
-        logger.success(f"Successfully completed processing for {source_str}")
+        with create_progress_reporter() as progress:
+            package_project_directory(
+                project_dir=project_dir,
+                package_root=settings.package_path,
+                remix_noise_name=remix,
+                progress=progress,
+            )
     except Exception as e:
-        logger.error(f"Failed to process video {source_str}: {e}")
+        logger.error(f"Failed to package project {project_dir}: {e}")
         raise typer.Exit(code=1)
 
 
-def main() -> None:
+@tools_app.command("noise")
+def noise_command(
+    noise_name: Annotated[
+        str,
+        typer.Argument(
+            help="Noise source name under PACKAGE_PATH/noise.",
+            show_default=False,
+        ),
+    ],
+    chunk_duration: Annotated[
+        int,
+        typer.Option(
+            "--chunk-duration",
+            help="Prepared noise chunk length in seconds.",
+        ),
+    ] = 300,
+) -> None:
+    """Prepare normalized noise chunks from PACKAGE_PATH/noise/NAME.webm."""
+    if settings.package_path is None:
+        logger.error("PACKAGE_PATH is not set; cannot prepare noise")
+        raise typer.Exit(code=1)
+    try:
+        with create_progress_reporter() as progress:
+            prepare_noise(
+                package_root=settings.package_path,
+                noise_name=noise_name,
+                chunk_duration_seconds=chunk_duration,
+                progress=progress,
+            )
+    except Exception as e:
+        logger.error(f"Failed to prepare noise {noise_name}: {e}")
+        raise typer.Exit(code=1)
+
+
+def main(argv: list[str] | None = None) -> None:
     """Entry point for the CLI application."""
-    app()
+    args = sys.argv[1:] if argv is None else argv
+    standalone_mode = argv is None
+    if args and args[0] in RESERVED_COMMANDS:
+        tools_app(args=args, standalone_mode=standalone_mode)
+        return
+    legacy_app(args=args, standalone_mode=standalone_mode)
 
 
 if __name__ == "__main__":

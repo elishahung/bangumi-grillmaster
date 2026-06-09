@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import threading
+from contextlib import contextmanager
 from types import TracebackType
 from typing import Any
 
@@ -53,6 +54,10 @@ class NoopProgressReporter:
         self, task_id: TaskID | None, status: str = "done"
     ) -> None:
         return None
+
+    @contextmanager
+    def suspend(self):
+        yield
 
     def chunk_started(
         self, index: int, total: int, from_index: int, to_index: int
@@ -179,6 +184,17 @@ class RichProgressReporter(NoopProgressReporter):
             self.progress.stop_task(task_id)
             self.progress.remove_task(task_id)
             self._stop_live()
+
+    @contextmanager
+    def suspend(self):
+        was_started = self._live_started
+        if was_started:
+            self._stop_live()
+        try:
+            yield
+        finally:
+            if was_started and list(self.progress.tasks):
+                self._start_live()
 
     def chunk_started(
         self, index: int, total: int, from_index: int, to_index: int

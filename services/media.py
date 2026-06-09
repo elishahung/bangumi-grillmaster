@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import os
 import threading
+import shutil
 from loguru import logger
 from pydantic import BaseModel
 
@@ -249,6 +250,330 @@ class MediaProcessor:
             )
 
     @staticmethod
+    def prepare_noise_chunks(
+        noise_file: Path,
+        output_dir: Path,
+        chunk_duration_seconds: int,
+        progress: NoopProgressReporter | None = None,
+    ) -> None:
+        """Encode fixed-length normalized noise chunks as 000.mp4 files."""
+        if chunk_duration_seconds <= 0:
+            raise ValueError("chunk_duration_seconds must be positive")
+        if not noise_file.exists():
+            raise FileNotFoundError(f"noise source not found: {noise_file}")
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        source_duration = MediaProcessor.get_media_duration(noise_file)
+        chunk_count = int(source_duration // chunk_duration_seconds)
+        if chunk_count <= 0:
+            raise ValueError(
+                f"noise source is shorter than one "
+                f"{chunk_duration_seconds}-second chunk: {noise_file}"
+            )
+
+        progress_task = (
+            progress.start_stage(
+                "Preparing noise",
+                total=chunk_count * chunk_duration_seconds,
+            )
+            if progress is not None
+            else None
+        )
+        try:
+            for index in range(chunk_count):
+                output_file = output_dir / f"{index:03d}.mp4"
+                description = f"Preparing noise {index + 1}/{chunk_count}"
+                if output_file.exists() and output_file.stat().st_size > 0:
+                    logger.info(f"Skipping prepared noise chunk: {output_file}")
+                    if progress is not None:
+                        progress.advance(
+                            progress_task,
+                            chunk_duration_seconds,
+                            description=description,
+                        )
+                    continue
+                start_seconds = index * chunk_duration_seconds
+                logger.info(
+                    f"Encoding noise chunk {index:03d} from {start_seconds}s "
+                    f"for {chunk_duration_seconds}s"
+                )
+                cmd = [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-nostats",
+                    "-progress",
+                    "pipe:1",
+                    "-ss",
+                    str(start_seconds),
+                    "-t",
+                    str(chunk_duration_seconds),
+                    "-i",
+                    str(noise_file),
+                    "-vf",
+                    MediaProcessor._REMIX_VIDEO_FILTER,
+                    "-af",
+                    "aresample=async=1",
+                    *MediaProcessor._REMIX_ENCODE_ARGS,
+                    str(output_file),
+                    "-y",
+                ]
+                MediaProcessor._run_ffmpeg_progress(
+                    cmd=cmd,
+                    progress=progress,
+                    progress_task=progress_task,
+                    duration_seconds=chunk_duration_seconds,
+                    progress_description=description,
+                    failure_label="noise preparation",
+                )
+        except Exception:
+            if progress is not None:
+                progress.finish(progress_task, "failed")
+            raise
+        if progress is not None:
+            progress.finish(progress_task)
+
+    @staticmethod
+    def encode_subtitled_segment(
+        video_file: Path,
+        subtitle_file: Path,
+        output_file: Path,
+        start_seconds: float,
+        end_seconds: float,
+        progress: NoopProgressReporter | None = None,
+        progress_task=None,
+        progress_description: str | None = None,
+    ) -> None:
+        """Burn subtitles into a trimmed normalized segment."""
+        if subtitle_file.parent != video_file.parent:
+            raise ValueError(
+                f"video and subtitle must share a directory for segment "
+                f"burn-in: {video_file.parent} vs {subtitle_file.parent}"
+            )
+        duration = max(0.0, end_seconds - start_seconds)
+        if duration <= 0:
+            raise ValueError("segment duration must be positive")
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        filter_complex = (
+            f"[0:v]subtitles={subtitle_file.name},"
+            f"trim=start={start_seconds:.3f}:duration={duration:.3f},"
+            f"setpts=PTS-STARTPTS,{MediaProcessor._REMIX_VIDEO_FILTER}[v];"
+            f"[0:a]atrim=start={start_seconds:.3f}:duration={duration:.3f},"
+            "asetpts=PTS-STARTPTS,aresample=async=1[a]"
+        )
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostats",
+            "-progress",
+            "pipe:1",
+            "-i",
+            video_file.name,
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[v]",
+            "-map",
+            "[a]",
+            *MediaProcessor._REMIX_ENCODE_ARGS,
+            str(output_file),
+            "-y",
+        ]
+        stderr_lines: deque[str] = deque(maxlen=20)
+        MediaProcessor._run_ffmpeg_progress(
+            cmd=cmd,
+            cwd=video_file.parent,
+            progress=progress,
+            progress_task=progress_task,
+            duration_seconds=duration,
+            progress_description=progress_description,
+            failure_label="remix segment",
+            stderr_lines=stderr_lines,
+        )
+
+    @staticmethod
+    def _run_ffmpeg_progress(
+        cmd: list[str],
+        progress: NoopProgressReporter | None,
+        progress_task,
+        duration_seconds: float,
+        progress_description: str | None,
+        failure_label: str,
+        cwd: Path | None = None,
+        stderr_lines: deque[str] | None = None,
+    ) -> None:
+        """Run ffmpeg and advance an existing task from progress output."""
+        stderr_tail_lines = (
+            stderr_lines if stderr_lines is not None else deque(maxlen=20)
+        )
+        process = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        def collect_stderr() -> None:
+            assert process.stderr is not None
+            for line in process.stderr:
+                stderr_tail_lines.append(line.rstrip())
+
+        stderr_thread = threading.Thread(target=collect_stderr, daemon=True)
+        stderr_thread.start()
+
+        progress_seconds = 0.0
+        assert process.stdout is not None
+        for line in process.stdout:
+            key, separator, value = line.strip().partition("=")
+            if separator == "" or key not in {"out_time_ms", "out_time_us"}:
+                continue
+            try:
+                current_seconds = int(value) / 1_000_000
+            except ValueError:
+                continue
+            current_seconds = min(current_seconds, duration_seconds)
+            delta_seconds = max(0.0, current_seconds - progress_seconds)
+            if progress is not None:
+                progress.advance(
+                    progress_task,
+                    delta_seconds,
+                    description=progress_description,
+                )
+            progress_seconds = current_seconds
+
+        return_code = process.wait()
+        stderr_thread.join()
+        if return_code == 0:
+            if progress is not None:
+                progress.advance(
+                    progress_task,
+                    max(0.0, duration_seconds - progress_seconds),
+                    description=progress_description,
+                )
+            return
+
+        stderr_tail = "\n".join(stderr_tail_lines)
+        logger.error(
+            f"ffmpeg {failure_label} failed (exit {return_code}): "
+            f"{stderr_tail}"
+        )
+        raise subprocess.CalledProcessError(
+            return_code,
+            cmd,
+            stderr=stderr_tail,
+        )
+
+    @staticmethod
+    def concat_remix_segments(
+        input_files: list[Path],
+        output_file: Path,
+        progress: NoopProgressReporter | None = None,
+    ) -> None:
+        """Concatenate normalized remix segments into an upload-safe MP4."""
+        if not input_files:
+            raise ValueError("input_files must not be empty")
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            suffix=".txt", mode="w", encoding="utf-8", delete=False
+        ) as temp_file:
+            for input_file in input_files:
+                escaped = str(input_file).replace("\\", "/").replace("'", "'\\''")
+                temp_file.write(f"file '{escaped}'\n")
+            concat_path = Path(temp_file.name)
+
+        try:
+            cmd = [
+                "ffmpeg",
+                "-hide_banner",
+                "-nostats",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_path),
+                "-c:v",
+                "copy",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-af",
+                "aresample=async=1:first_pts=0",
+                "-avoid_negative_ts",
+                "make_zero",
+                "-movflags",
+                "+faststart",
+                str(output_file),
+                "-y",
+            ]
+            progress_context = (
+                progress.suspend()
+                if progress is not None
+                else NoopProgressReporter().suspend()
+            )
+            with progress_context:
+                result = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+            if result.returncode != 0:
+                stderr_tail = "\n".join(result.stderr.splitlines()[-20:])
+                logger.error(
+                    f"ffmpeg remix concat failed "
+                    f"(exit {result.returncode}): {stderr_tail}"
+                )
+                raise subprocess.CalledProcessError(
+                    result.returncode,
+                    cmd,
+                    output=result.stdout,
+                    stderr=result.stderr,
+                )
+        finally:
+            concat_path.unlink(missing_ok=True)
+
+    @staticmethod
+    def build_remix_output(
+        video_file: Path,
+        subtitle_file: Path,
+        output_file: Path,
+        noise_before: Path,
+        noise_after: Path,
+        start_seconds: float,
+        end_seconds: float,
+        progress: NoopProgressReporter | None = None,
+        progress_task=None,
+    ) -> None:
+        """Create one noise + subtitled segment + noise remix output."""
+        temp_dir = Path(tempfile.mkdtemp(prefix="grill_remix_"))
+        try:
+            target_segment = temp_dir / "target.mp4"
+            MediaProcessor.encode_subtitled_segment(
+                video_file=video_file,
+                subtitle_file=subtitle_file,
+                output_file=target_segment,
+                start_seconds=start_seconds,
+                end_seconds=end_seconds,
+                progress=progress,
+                progress_task=progress_task,
+                progress_description=f"Remixing {output_file.name}",
+            )
+            MediaProcessor.concat_remix_segments(
+                [noise_before, target_segment, noise_after],
+                output_file,
+                progress=progress,
+            )
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @staticmethod
     def parse_timecode_line(timecode: str) -> TimeRange:
         """Parse a single SRT timecode line into seconds."""
         start_str, end_str = [part.strip() for part in timecode.split("-->")]
@@ -417,3 +742,23 @@ class MediaProcessor:
             + int(minutes) * 60
             + float(seconds)
         )
+
+    _REMIX_VIDEO_FILTER = (
+        "scale=1920:1080:force_original_aspect_ratio=decrease,"
+        "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
+        "fps=30000/1001,format=yuv420p"
+    )
+    _REMIX_ENCODE_ARGS = [
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "18",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+    ]

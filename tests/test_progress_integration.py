@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 import shutil
 import tempfile
 import unittest
@@ -24,6 +25,7 @@ class FakeProgressReporter:
     def __init__(self):
         self.events = []
         self._next_task = 1
+        self.suspended = 0
 
     def __enter__(self):
         return self
@@ -44,6 +46,19 @@ class FakeProgressReporter:
 
     def finish(self, task_id, status: str = "done"):
         self.events.append(("finish", task_id, status))
+
+    def suspend(self):
+        reporter = self
+
+        class SuspendContext:
+            def __enter__(self):
+                reporter.suspended += 1
+                reporter.events.append(("suspend_enter",))
+
+            def __exit__(self, exc_type, exc, traceback):
+                reporter.events.append(("suspend_exit",))
+
+        return SuspendContext()
 
     def chunk_started(
         self, index: int, total: int, from_index: int, to_index: int
@@ -294,6 +309,231 @@ class MediaProgressTests(unittest.TestCase):
         self.assertIn(("start_stage", 1, "Burning subtitles", 1.0), progress.events)
         self.assertIn(("advance", 1, 0.5, None), progress.events)
         self.assertEqual(progress.events[-1], ("finish", 1, "done"))
+
+    def test_burn_in_subtitles_collects_stderr_on_failure(self):
+        root = Path(tempfile.mkdtemp(prefix="burn-progress-fail-test-"))
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        video = root / "video.mp4"
+        subtitle = root / "video.ass"
+        output = root / "out.mp4"
+        video.write_text("video", encoding="utf-8")
+        subtitle.write_text("subtitle", encoding="utf-8")
+        progress = FakeProgressReporter()
+
+        class FakeProcess:
+            stdout = iter([])
+            stderr = iter(["bad filter\n"])
+
+            def wait(self):
+                return 1
+
+        with (
+            patch.object(MediaProcessor, "get_media_duration", return_value=1.0),
+            patch("services.media.subprocess.Popen", return_value=FakeProcess()),
+        ):
+            with self.assertRaises(subprocess.CalledProcessError) as raised:
+                MediaProcessor.burn_in_subtitles(
+                    video,
+                    subtitle,
+                    output,
+                    progress=progress,
+                )
+
+        self.assertIn("bad filter", raised.exception.stderr)
+        self.assertEqual(progress.events[-1], ("finish", 1, "failed"))
+
+    def test_remix_segment_reports_progress_to_existing_task(self):
+        root = Path(tempfile.mkdtemp(prefix="remix-progress-test-"))
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        video = root / "video.mp4"
+        subtitle = root / "video.ass"
+        output = root / "segment.mp4"
+        video.write_text("video", encoding="utf-8")
+        subtitle.write_text("subtitle", encoding="utf-8")
+        progress = FakeProgressReporter()
+
+        class FakeProcess:
+            stdout = iter(
+                [
+                    "out_time_ms=250000\n",
+                    "out_time_ms=750000\n",
+                    "progress=end\n",
+                ]
+            )
+            stderr = iter([])
+
+            def wait(self):
+                return 0
+
+        with patch("services.media.subprocess.Popen", return_value=FakeProcess()):
+            MediaProcessor.encode_subtitled_segment(
+                video,
+                subtitle,
+                output,
+                start_seconds=0.0,
+                end_seconds=1.0,
+                progress=progress,
+                progress_task=7,
+                progress_description="Remixing video_1.mp4",
+            )
+
+        self.assertIn(
+            ("advance", 7, 0.25, "Remixing video_1.mp4"),
+            progress.events,
+        )
+        self.assertIn(
+            ("advance", 7, 0.5, "Remixing video_1.mp4"),
+            progress.events,
+        )
+        self.assertEqual(
+            progress.events[-1],
+            ("advance", 7, 0.25, "Remixing video_1.mp4"),
+        )
+
+    def test_prepare_noise_reports_existing_and_encoded_chunk_progress(self):
+        root = Path(tempfile.mkdtemp(prefix="noise-progress-test-"))
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        noise = root / "sleep.webm"
+        output_dir = root / "sleep"
+        output_dir.mkdir()
+        noise.write_text("noise", encoding="utf-8")
+        existing = output_dir / "000.mp4"
+        existing.write_text("prepared", encoding="utf-8")
+        progress = FakeProgressReporter()
+
+        class FakeProcess:
+            stdout = iter(
+                [
+                    "out_time_ms=500000\n",
+                    "out_time_ms=1000000\n",
+                    "progress=end\n",
+                ]
+            )
+            stderr = iter([])
+
+            def wait(self):
+                return 0
+
+        with (
+            patch.object(MediaProcessor, "get_media_duration", return_value=2.0),
+            patch("services.media.subprocess.Popen", return_value=FakeProcess()),
+        ):
+            MediaProcessor.prepare_noise_chunks(
+                noise_file=noise,
+                output_dir=output_dir,
+                chunk_duration_seconds=1,
+                progress=progress,
+            )
+
+        self.assertEqual(
+            progress.events[0],
+            ("start_stage", 1, "Preparing noise", 2),
+        )
+        self.assertIn(
+            ("advance", 1, 1, "Preparing noise 1/2"),
+            progress.events,
+        )
+        self.assertIn(
+            ("advance", 1, 0.5, "Preparing noise 2/2"),
+            progress.events,
+        )
+        self.assertEqual(progress.events[-1], ("finish", 1, "done"))
+
+    def test_prepare_noise_marks_progress_failed_on_ffmpeg_failure(self):
+        root = Path(tempfile.mkdtemp(prefix="noise-progress-fail-test-"))
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        noise = root / "sleep.webm"
+        output_dir = root / "sleep"
+        noise.write_text("noise", encoding="utf-8")
+        progress = FakeProgressReporter()
+
+        class FakeProcess:
+            stdout = iter([])
+            stderr = iter(["bad input\n"])
+
+            def wait(self):
+                return 1
+
+        with (
+            patch.object(MediaProcessor, "get_media_duration", return_value=1.0),
+            patch("services.media.subprocess.Popen", return_value=FakeProcess()),
+        ):
+            with self.assertRaises(Exception):
+                MediaProcessor.prepare_noise_chunks(
+                    noise_file=noise,
+                    output_dir=output_dir,
+                    chunk_duration_seconds=1,
+                    progress=progress,
+                )
+
+        self.assertEqual(progress.events[-1], ("finish", 1, "failed"))
+
+    def test_concat_remix_segments_captures_ffmpeg_output_and_suspends_progress(self):
+        root = Path(tempfile.mkdtemp(prefix="concat-progress-test-"))
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        inputs = []
+        for index in range(3):
+            input_file = root / f"{index}.mp4"
+            input_file.write_text("video", encoding="utf-8")
+            inputs.append(input_file)
+        output = root / "out.mp4"
+        progress = FakeProgressReporter()
+
+        with patch("services.media.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess(
+                args=["ffmpeg"],
+                returncode=0,
+                stdout="",
+                stderr="ffmpeg banner",
+            )
+            MediaProcessor.concat_remix_segments(
+                inputs,
+                output,
+                progress=progress,
+            )
+
+        self.assertEqual(progress.suspended, 1)
+        self.assertEqual(progress.events, [("suspend_enter",), ("suspend_exit",)])
+        self.assertEqual(run.call_args.kwargs["stdout"], subprocess.PIPE)
+        self.assertEqual(run.call_args.kwargs["stderr"], subprocess.PIPE)
+        self.assertNotIn("check", run.call_args.kwargs)
+
+    def test_build_remix_output_suspends_progress_during_concat(self):
+        root = Path(tempfile.mkdtemp(prefix="build-remix-progress-test-"))
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        video = root / "video.mp4"
+        subtitle = root / "video.ass"
+        noise_before = root / "before.mp4"
+        noise_after = root / "after.mp4"
+        output = root / "out.mp4"
+        for path in (video, subtitle, noise_before, noise_after):
+            path.write_text("media", encoding="utf-8")
+        progress = FakeProgressReporter()
+
+        def fake_encode(**kwargs):
+            kwargs["output_file"].write_text("segment", encoding="utf-8")
+
+        with (
+            patch.object(
+                MediaProcessor,
+                "encode_subtitled_segment",
+                side_effect=fake_encode,
+            ),
+            patch.object(MediaProcessor, "concat_remix_segments") as concat,
+        ):
+            MediaProcessor.build_remix_output(
+                video_file=video,
+                subtitle_file=subtitle,
+                output_file=output,
+                noise_before=noise_before,
+                noise_after=noise_after,
+                start_seconds=0.0,
+                end_seconds=1.0,
+                progress=progress,
+                progress_task=1,
+            )
+
+        self.assertIs(concat.call_args.kwargs["progress"], progress)
 
 
 class RichProgressReporterTests(unittest.TestCase):
