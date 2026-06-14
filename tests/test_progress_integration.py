@@ -390,6 +390,35 @@ class MediaProgressTests(unittest.TestCase):
             ("advance", 7, 0.25, "Remixing video_1.mp4"),
         )
 
+    def test_remix_segment_resamples_audio_to_noise_chunk_rate(self):
+        root = Path(tempfile.mkdtemp(prefix="remix-audio-rate-test-"))
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        video = root / "video.mp4"
+        subtitle = root / "video.ass"
+        output = root / "segment.mp4"
+        video.write_text("video", encoding="utf-8")
+        subtitle.write_text("subtitle", encoding="utf-8")
+
+        class FakeProcess:
+            stdout = iter(["progress=end\n"])
+            stderr = iter([])
+
+            def wait(self):
+                return 0
+
+        with patch("services.media.subprocess.Popen", return_value=FakeProcess()) as popen:
+            MediaProcessor.encode_subtitled_segment(
+                video,
+                subtitle,
+                output,
+                start_seconds=0.0,
+                end_seconds=1.0,
+            )
+
+        cmd = popen.call_args.args[0]
+        filter_complex = cmd[cmd.index("-filter_complex") + 1]
+        self.assertIn("aresample=48000:async=1", filter_complex)
+
     def test_prepare_noise_reports_existing_and_encoded_chunk_progress(self):
         root = Path(tempfile.mkdtemp(prefix="noise-progress-test-"))
         self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
@@ -416,7 +445,7 @@ class MediaProgressTests(unittest.TestCase):
 
         with (
             patch.object(MediaProcessor, "get_media_duration", return_value=2.0),
-            patch("services.media.subprocess.Popen", return_value=FakeProcess()),
+            patch("services.media.subprocess.Popen", return_value=FakeProcess()) as popen,
         ):
             MediaProcessor.prepare_noise_chunks(
                 noise_file=noise,
@@ -437,6 +466,8 @@ class MediaProgressTests(unittest.TestCase):
             ("advance", 1, 0.5, "Preparing noise 2/2"),
             progress.events,
         )
+        cmd = popen.call_args.args[0]
+        self.assertEqual(cmd[cmd.index("-af") + 1], "aresample=48000:async=1")
         self.assertEqual(progress.events[-1], ("finish", 1, "done"))
 
     def test_prepare_noise_marks_progress_failed_on_ffmpeg_failure(self):

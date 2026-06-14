@@ -312,7 +312,7 @@ class MediaProcessor:
                     "-vf",
                     MediaProcessor._REMIX_VIDEO_FILTER,
                     "-af",
-                    "aresample=async=1",
+                    "aresample=48000:async=1",
                     *MediaProcessor._REMIX_ENCODE_ARGS,
                     str(output_file),
                     "-y",
@@ -359,7 +359,7 @@ class MediaProcessor:
             f"trim=start={start_seconds:.3f}:duration={duration:.3f},"
             f"setpts=PTS-STARTPTS,{MediaProcessor._REMIX_VIDEO_FILTER}[v];"
             f"[0:a]atrim=start={start_seconds:.3f}:duration={duration:.3f},"
-            "asetpts=PTS-STARTPTS,aresample=async=1[a]"
+            "asetpts=PTS-STARTPTS,aresample=48000:async=1[a]"
         )
         cmd = [
             "ffmpeg",
