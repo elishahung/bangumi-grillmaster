@@ -25,6 +25,7 @@ def package_project(
     package_root: Path,
     progress: NoopProgressReporter | None = None,
     remix_noise_name: str | None = None,
+    remix_prefix: bool = False,
 ) -> None:
     """Create the deliverable folder.
 
@@ -59,6 +60,7 @@ def package_project(
                 video_file=video_in,
                 subtitle_file=ass_in,
                 noise_name=remix_noise_name,
+                prefix_noise=remix_prefix,
                 progress=progress,
             )
     except Exception as e:
@@ -74,6 +76,7 @@ def package_project_directory(
     project_dir: Path,
     package_root: Path,
     remix_noise_name: str | None = None,
+    remix_prefix: bool = False,
     progress: NoopProgressReporter | None = None,
 ) -> None:
     """Package an already-finalized project directory."""
@@ -89,6 +92,7 @@ def package_project_directory(
         package_root=package_root,
         progress=progress,
         remix_noise_name=remix_noise_name,
+        remix_prefix=remix_prefix,
     )
 
 

@@ -39,13 +39,19 @@ def _run_process(
     glossary_check: bool,
     cover: bool,
     remix: str | None,
+    prefix: bool,
 ) -> None:
     logger.info(
         f"CLI invoked with source_str={source_str}, "
         f"translation_hint={translation_hint}, break_after={break_after}, "
         f"parent_project={parent_project}, refine={refine}, "
-        f"glossary_check={glossary_check}, cover={cover}, remix={remix}"
+        f"glossary_check={glossary_check}, cover={cover}, remix={remix}, "
+        f"prefix={prefix}"
     )
+
+    if prefix and remix is None:
+        logger.error("--prefix requires --remix")
+        raise typer.Exit(code=1)
 
     try:
         submit_project(
@@ -57,6 +63,7 @@ def _run_process(
             enable_glossary_check=glossary_check,
             enable_cover=cover,
             remix_noise_name=remix,
+            remix_prefix=prefix,
         )
         logger.success(f"Successfully completed processing for {source_str}")
     except Exception as e:
@@ -151,6 +158,13 @@ def process(
             show_default=False,
         ),
     ] = None,
+    prefix: Annotated[
+        bool,
+        typer.Option(
+            "--prefix",
+            help="Write a standalone noise output before remix videos.",
+        ),
+    ] = False,
 ) -> None:
     """Submit and process an online video for captioning and translation."""
     _run_process(
@@ -162,6 +176,7 @@ def process(
         glossary_check=glossary_check,
         cover=cover,
         remix=remix,
+        prefix=prefix,
     )
 
 
@@ -182,8 +197,18 @@ def package_command(
             show_default=False,
         ),
     ] = None,
+    prefix: Annotated[
+        bool,
+        typer.Option(
+            "--prefix",
+            help="Write a standalone noise output before remix videos.",
+        ),
+    ] = False,
 ) -> None:
     """Run only the package step for an existing project directory."""
+    if prefix and remix is None:
+        logger.error("--prefix requires --remix")
+        raise typer.Exit(code=1)
     if settings.package_path is None:
         logger.error("PACKAGE_PATH is not set; cannot package project")
         raise typer.Exit(code=1)
@@ -193,6 +218,7 @@ def package_command(
                 project_dir=project_dir,
                 package_root=settings.package_path,
                 remix_noise_name=remix,
+                remix_prefix=prefix,
                 progress=progress,
             )
     except Exception as e:

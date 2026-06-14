@@ -40,6 +40,44 @@ class MainCliTests(unittest.TestCase):
             project_dir=project_dir,
             package_root=package_root,
             remix_noise_name="sleep",
+            remix_prefix=False,
+            progress=progress,
+        )
+
+    def test_package_command_accepts_remix_prefix(self):
+        root = self._make_temp_dir()
+        project_dir = root / "project"
+        package_root = root / "package"
+        project_dir.mkdir()
+        progress = object()
+
+        with (
+            patch.object(main_module.settings, "package_path", package_root),
+            patch.object(
+                main_module, "create_progress_reporter"
+            ) as create_progress_reporter,
+            patch.object(
+                main_module, "package_project_directory"
+            ) as package_project_directory,
+        ):
+            create_progress_reporter.return_value.__enter__.return_value = (
+                progress
+            )
+            main_module.main(
+                [
+                    "package",
+                    str(project_dir),
+                    "--remix",
+                    "sleep",
+                    "--prefix",
+                ]
+            )
+
+        package_project_directory.assert_called_once_with(
+            project_dir=project_dir,
+            package_root=package_root,
+            remix_noise_name="sleep",
+            remix_prefix=True,
             progress=progress,
         )
 
@@ -80,6 +118,20 @@ class MainCliTests(unittest.TestCase):
         self.assertEqual(
             submit_project.call_args.kwargs["remix_noise_name"], "sleep"
         )
+        self.assertFalse(submit_project.call_args.kwargs["remix_prefix"])
+
+    def test_legacy_source_invocation_accepts_remix_prefix(self):
+        with patch.object(main_module, "submit_project") as submit_project:
+            main_module.main(["BV123", "--remix", "sleep", "--prefix"])
+
+        submit_project.assert_called_once()
+        self.assertTrue(submit_project.call_args.kwargs["remix_prefix"])
+
+    def test_prefix_without_remix_fails(self):
+        with patch.object(main_module, "submit_project") as submit_project:
+            main_module.main(["BV123", "--prefix"])
+
+        submit_project.assert_not_called()
 
 
 if __name__ == "__main__":

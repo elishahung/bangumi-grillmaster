@@ -99,11 +99,40 @@ class PackageTests(unittest.TestCase):
 
         self.assertEqual(
             [path.name for path in selection.chunk_paths],
+            ["003.mp4", "004.mp4"],
+        )
+        self.assertEqual(selection.next_index, 0)
+
+    def test_select_noise_chunks_can_use_prefix_count(self):
+        root = self._make_temp_dir()
+        noise_dir = root / "noise" / "sleep"
+        noise_dir.mkdir(parents=True)
+        for index in range(5):
+            (noise_dir / f"{index:03d}.mp4").write_text(
+                "chunk", encoding="utf-8"
+            )
+        (noise_dir / "state.json").write_text(
+            json.dumps({"next_index": 3}), encoding="utf-8"
+        )
+
+        selection = package_module.select_noise_chunks(noise_dir, chunk_count=3)
+
+        self.assertEqual(
+            [path.name for path in selection.chunk_paths],
             ["003.mp4", "004.mp4", "000.mp4"],
         )
         self.assertEqual(selection.next_index, 1)
 
-    def test_select_noise_chunks_rejects_less_than_three_chunks(self):
+    def test_select_noise_chunks_rejects_less_than_two_chunks(self):
+        root = self._make_temp_dir()
+        noise_dir = root / "noise" / "sleep"
+        noise_dir.mkdir(parents=True)
+        (noise_dir / "000.mp4").write_text("chunk", encoding="utf-8")
+
+        with self.assertRaises(package_module.RemixPackageError):
+            package_module.select_noise_chunks(noise_dir)
+
+    def test_select_noise_chunks_rejects_less_than_prefix_count(self):
         root = self._make_temp_dir()
         noise_dir = root / "noise" / "sleep"
         noise_dir.mkdir(parents=True)
@@ -113,7 +142,7 @@ class PackageTests(unittest.TestCase):
             )
 
         with self.assertRaises(package_module.RemixPackageError):
-            package_module.select_noise_chunks(noise_dir)
+            package_module.select_noise_chunks(noise_dir, chunk_count=3)
 
     def test_select_noise_chunks_rejects_non_contiguous_chunks(self):
         root = self._make_temp_dir()
@@ -145,7 +174,7 @@ class PackageTests(unittest.TestCase):
         project = Project(id="demo", name="show")
 
         def fail_on_second_output(**kwargs):
-            if kwargs["output_file"].name == "video_3.mp4":
+            if kwargs["output_file"].name == "video_2.mp4":
                 raise subprocess.CalledProcessError(1, ["ffmpeg"])
             kwargs["output_file"].write_text("ok", encoding="utf-8")
 
@@ -197,7 +226,7 @@ class PackageTests(unittest.TestCase):
         )
         self.assertTrue((target / "cover.png").exists())
 
-    def test_remix_package_writes_three_videos_cover_and_state(self):
+    def test_remix_package_writes_two_videos_cover_and_state(self):
         root = self._make_temp_dir()
         source = root / "source"
         package_root = root / "package"
@@ -245,14 +274,14 @@ class PackageTests(unittest.TestCase):
         target = package_root / "demo_show"
         self.assertTrue((target / "video_1.mp4").exists())
         self.assertTrue((target / "video_2.mp4").exists())
-        self.assertTrue((target / "video_3.mp4").exists())
+        self.assertFalse((target / "video_3.mp4").exists())
         self.assertTrue((target / "cover.jpg").exists())
         self.assertEqual(
             (target / "video_1.mp4").read_text(encoding="utf-8"),
-            "chunk 0",
+            "remix",
         )
         state = json.loads((noise_dir / "state.json").read_text("utf-8"))
-        self.assertEqual(state["next_index"], 3)
+        self.assertEqual(state["next_index"], 2)
 
     def test_remix_package_uses_one_progress_task_for_two_target_renders(self):
         root = self._make_temp_dir()
@@ -312,11 +341,11 @@ class PackageTests(unittest.TestCase):
             progress.events[0],
             ("start_stage", 1, "Remixing subtitles", 6.0),
         )
-        self.assertIn(("advance", 1, 2.5, "video_2.mp4"), progress.events)
-        self.assertIn(("advance", 1, 3.5, "video_3.mp4"), progress.events)
+        self.assertIn(("advance", 1, 2.5, "video_1.mp4"), progress.events)
+        self.assertIn(("advance", 1, 3.5, "video_2.mp4"), progress.events)
         self.assertEqual(progress.events[-1], ("finish", 1, "done"))
 
-    def test_remix_package_copies_noise_then_uses_one_noise_chunk_per_render(self):
+    def test_remix_prefix_copies_noise_then_uses_one_noise_chunk_per_render(self):
         root = self._make_temp_dir()
         source = root / "source"
         package_root = root / "package"
@@ -363,6 +392,7 @@ class PackageTests(unittest.TestCase):
                 video_file=source / "video.mp4",
                 subtitle_file=source / "video.cht.ass",
                 noise_name="sleep",
+                prefix_noise=True,
             )
 
         self.assertEqual(

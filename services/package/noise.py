@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ValidationError
 
 from services.package.constants import (
-    MIN_REMIX_CHUNK_COUNT,
+    REMIX_CHUNK_COUNT,
     NOISE_STATE_FILE_NAME,
 )
 from services.package.errors import RemixPackageError
@@ -24,22 +24,26 @@ class NoiseSelection:
     next_index: int
 
 
-def select_noise_chunks(noise_dir: Path) -> NoiseSelection:
+def select_noise_chunks(
+    noise_dir: Path, chunk_count: int = REMIX_CHUNK_COUNT
+) -> NoiseSelection:
     """Select prepared chunks and compute the next cyclic index."""
+    if chunk_count <= 0:
+        raise ValueError("chunk_count must be positive")
     chunk_paths = _prepared_noise_chunks(noise_dir)
-    if len(chunk_paths) < MIN_REMIX_CHUNK_COUNT:
+    if len(chunk_paths) < chunk_count:
         raise RemixPackageError(
             f"noise '{noise_dir.name}' needs at least "
-            f"{MIN_REMIX_CHUNK_COUNT} chunks, found {len(chunk_paths)}"
+            f"{chunk_count} chunks, found {len(chunk_paths)}"
         )
 
     state = _read_noise_state(noise_dir)
     start = state.next_index % len(chunk_paths)
     selected = [
         chunk_paths[(start + offset) % len(chunk_paths)]
-        for offset in range(MIN_REMIX_CHUNK_COUNT)
+        for offset in range(chunk_count)
     ]
-    next_index = (start + MIN_REMIX_CHUNK_COUNT) % len(chunk_paths)
+    next_index = (start + chunk_count) % len(chunk_paths)
     return NoiseSelection(chunk_paths=selected, next_index=next_index)
 
 

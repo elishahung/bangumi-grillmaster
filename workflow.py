@@ -39,6 +39,7 @@ def submit_project(
     enable_glossary_check: bool = False,
     enable_cover: bool = False,
     remix_noise_name: str | None = None,
+    remix_prefix: bool = False,
 ) -> None:
     """Submit a new video project for processing.
 
@@ -63,6 +64,8 @@ def submit_project(
             Overrides ``settings.enable_cover_generation`` when True. Always
             skipped when ``break_after`` is set.
         remix_noise_name: Optional prepared noise set name for remix packaging.
+        remix_prefix: Whether remix packaging should prepend a standalone
+            noise output before the two mixed outputs.
 
     Note:
         The project will be automatically saved to the projects directory before
@@ -83,6 +86,7 @@ def submit_project(
         enable_glossary_check=enable_glossary_check,
         enable_cover=enable_cover,
         remix_noise_name=remix_noise_name,
+        remix_prefix=remix_prefix,
     )
 
 
@@ -116,6 +120,7 @@ def process_project(
     enable_glossary_check: bool = False,
     enable_cover: bool = False,
     remix_noise_name: str | None = None,
+    remix_prefix: bool = False,
     progress: NoopProgressReporter | None = None,
 ) -> None:
     """Process a video project with an auto-enabled CLI progress reporter."""
@@ -132,6 +137,7 @@ def process_project(
             enable_glossary_check=enable_glossary_check,
             enable_cover=enable_cover,
             remix_noise_name=remix_noise_name,
+            remix_prefix=remix_prefix,
             progress=active_progress,
         )
 
@@ -143,6 +149,7 @@ def _process_project_impl(
     enable_glossary_check: bool = False,
     enable_cover: bool = False,
     remix_noise_name: str | None = None,
+    remix_prefix: bool = False,
     progress: NoopProgressReporter | None = None,
 ) -> None:
     """Process a video project through the complete captioning pipeline.
@@ -176,6 +183,8 @@ def _process_project_impl(
             Overrides ``settings.enable_cover_generation`` when True. Always
             skipped when ``break_after`` is set.
         remix_noise_name: Optional prepared noise set name for remix packaging.
+        remix_prefix: Whether remix packaging should prepend a standalone
+            noise output before the two mixed outputs.
 
     Raises:
         Exception: If any required stage of the processing fails.
@@ -453,6 +462,7 @@ def _process_project_impl(
             settings.package_path,
             progress,
             remix_noise_name=remix_noise_name,
+            remix_prefix=remix_prefix,
         )
 
     logger.info(

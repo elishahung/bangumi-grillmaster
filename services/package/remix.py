@@ -8,6 +8,10 @@ from loguru import logger
 
 from project import FINALIZED_SRT_FILE_NAME
 from services.media import MediaProcessor, TimeRange
+from services.package.constants import (
+    PREFIX_REMIX_CHUNK_COUNT,
+    REMIX_CHUNK_COUNT,
+)
 from services.package.errors import RemixPackageError
 from services.package.noise import select_noise_chunks, write_noise_state
 from services.progress import NoopProgressReporter
@@ -20,15 +24,19 @@ def package_remix(
     video_file: Path,
     subtitle_file: Path,
     noise_name: str,
+    prefix_noise: bool = False,
     progress: NoopProgressReporter | None = None,
 ) -> None:
-    """Create the three remix package MP4 files."""
+    """Create remix package MP4 files."""
     finalized_srt = source_root / FINALIZED_SRT_FILE_NAME
     if not finalized_srt.exists():
         raise RemixPackageError(f"finalized SRT not found: {finalized_srt}")
 
     noise_dir = package_root / "noise" / noise_name
-    selection = select_noise_chunks(noise_dir)
+    chunk_count = (
+        PREFIX_REMIX_CHUNK_COUNT if prefix_noise else REMIX_CHUNK_COUNT
+    )
+    selection = select_noise_chunks(noise_dir, chunk_count=chunk_count)
     duration_seconds = MediaProcessor.get_media_duration(video_file)
     split_seconds = select_remix_split(finalized_srt, duration_seconds)
     logger.info(
@@ -38,7 +46,10 @@ def package_remix(
 
     progress_task = None
     try:
-        shutil.copy2(selection.chunk_paths[0], target_dir / "video_1.mp4")
+        output_offset = 0
+        if prefix_noise:
+            shutil.copy2(selection.chunk_paths[0], target_dir / "video_1.mp4")
+            output_offset = 1
         progress_task = (
             progress.start_stage("Remixing subtitles", total=duration_seconds)
             if progress is not None
@@ -47,8 +58,8 @@ def package_remix(
         MediaProcessor.build_remix_output(
             video_file=video_file,
             subtitle_file=subtitle_file,
-            output_file=target_dir / "video_2.mp4",
-            noise_file=selection.chunk_paths[1],
+            output_file=target_dir / f"video_{1 + output_offset}.mp4",
+            noise_file=selection.chunk_paths[0 + output_offset],
             start_seconds=0.0,
             end_seconds=split_seconds,
             progress=progress,
@@ -57,8 +68,8 @@ def package_remix(
         MediaProcessor.build_remix_output(
             video_file=video_file,
             subtitle_file=subtitle_file,
-            output_file=target_dir / "video_3.mp4",
-            noise_file=selection.chunk_paths[2],
+            output_file=target_dir / f"video_{2 + output_offset}.mp4",
+            noise_file=selection.chunk_paths[1 + output_offset],
             start_seconds=split_seconds,
             end_seconds=duration_seconds,
             progress=progress,
